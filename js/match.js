@@ -16,7 +16,7 @@ const RARITY_ORDER = Object.keys(RARITY);
  *   about what is parked near them: the same car reappears, and someone who has
  *   logged six Toyotas is likely looking at a seventh.
  */
-export function candidatesForBody(body, limit = 8, history = {}) {
+export function candidatesForBody(body, limit = 8, history = {}, pool = CARS) {
   const caughtIds = history.caughtIds || new Set();
   const makeCounts = history.makeCounts || new Map();
 
@@ -27,7 +27,7 @@ export function candidatesForBody(body, limit = 8, history = {}) {
     RARITY_ORDER.indexOf(car.rarity),
   ];
 
-  return [...CARS]
+  return [...pool]
     .sort((a, b) => {
       const ra = rank(a);
       const rb = rank(b);

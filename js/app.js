@@ -2,6 +2,7 @@ import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
 import { classifyImage, embedImage, looksLikeVehicle, inferBody, topLabel, ClassifyError, warmUp } from './classify.js';
 import { candidatesForBody } from './match.js';
 import { remember, recall, memoryStats, forgetAll } from './memory.js';
+import { TRAIT_GROUPS, matchesTraits, usefulTraits } from './traits.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
   getState, entryFor, isDiscovered, discoveredCount, completion, catchHistory,
@@ -14,6 +15,8 @@ const $ = (sel) => document.querySelector(sel);
 let capture = null;
 let filter = 'all';
 let lastResult = null;
+let selectedTraits = new Set();
+let traitsOpen = false;
 
 // ------------------------------------------------------------------ toasts
 
@@ -179,6 +182,8 @@ async function onIdentify() {
 
   const { body, confidence } = inferBody(predictions);
   const learned = embedding ? recall(embedding) : null;
+  selectedTraits = new Set(); // a new photo starts from the whole index again
+  traitsOpen = false;
   lastResult = { predictions, body, confidence, label: topLabel(predictions), embedding, learned };
   renderVerdict();
 }
@@ -195,6 +200,42 @@ function searchCars(query, limit) {
   return CARS
     .filter((c) => displayName(c).toLowerCase().includes(q) || c.country.toLowerCase().includes(q))
     .slice(0, limit);
+}
+
+/**
+ * Thirty things you can check by looking at the car. The model only ever reads a
+ * shape, so this is where the accuracy actually comes from — tick what you can
+ * see and the index narrows to cars that match all of it.
+ */
+function traitPanel(pool) {
+  const offered = usefulTraits(pool, selectedTraits);
+  const groups = TRAIT_GROUPS
+    .map(([key, label]) => {
+      const chips = offered.filter((t) => t.group === key);
+      if (!chips.length) return '';
+      return `
+        <div class="trait-group">
+          <p class="trait-group-label">${esc(label)}</p>
+          <div class="trait-chips">
+            ${chips.map((t) => `
+              <button class="trait-chip${selectedTraits.has(t.id) ? ' is-on' : ''}"
+                      data-trait="${esc(t.id)}"
+                      aria-pressed="${selectedTraits.has(t.id)}">${esc(t.label)}</button>`).join('')}
+          </div>
+        </div>`;
+    })
+    .join('');
+
+  const count = selectedTraits.size
+    ? `<span class="trait-count">${CARS.length} → ${pool.length}</span>`
+    : '<span class="trait-count muted">30 things to check</span>';
+
+  return `
+    <details class="traits"${traitsOpen || selectedTraits.size ? ' open' : ''}>
+      <summary>Narrow it down ${count}</summary>
+      ${groups}
+      ${selectedTraits.size ? '<button class="btn btn-ghost btn-small" data-clear-traits>Clear</button>' : ''}
+    </details>`;
 }
 
 function renderVerdict(query = '') {
@@ -217,16 +258,21 @@ function renderVerdict(query = '') {
   const searching = Boolean(query.trim());
   // A shaky body-style guess gets a longer shortlist, since it is likelier the
   // right car sits just outside the top few.
-  const shortlistSize = confidence >= 0.6 ? 8 : 12;
   const learnedCar = learned ? CARS_BY_ID.get(learned.carId) : null;
+
+  // Ticked traits narrow the whole index, not just the shortlist — that is what
+  // finds a car the body-style guess would never have surfaced.
+  const narrowing = selectedTraits.size > 0;
+  const pool = narrowing ? CARS.filter((car) => matchesTraits(car, selectedTraits)) : CARS;
+  const shortlistSize = narrowing ? 24 : (confidence >= 0.6 ? 8 : 12);
 
   let candidates;
   if (searching) {
-    candidates = searchCars(query, 20);
+    candidates = searchCars(query, 20).filter((car) => matchesTraits(car, selectedTraits));
   } else {
-    candidates = candidatesForBody(body, shortlistSize, catchHistory());
+    candidates = candidatesForBody(body, shortlistSize, catchHistory(), pool);
     // A car you have taught it outranks any guess made from the shape alone.
-    if (learnedCar) {
+    if (learnedCar && matchesTraits(learnedCar, selectedTraits)) {
       candidates = [learnedCar, ...candidates.filter((c) => c.id !== learnedCar.id)].slice(0, shortlistSize);
     }
   }
@@ -248,6 +294,7 @@ function renderVerdict(query = '') {
       <p class="muted">${intro}</p>
       <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
              value="${esc(query)}" autocomplete="off">
+      ${traitPanel(pool)}
       <div class="candidates">
         ${candidates.length
           ? candidates.map((car) => candidateRow({ car })).join('')
@@ -460,6 +507,20 @@ function wire() {
     }
     const pick = t.closest('[data-pick]');
     if (pick) return logCar(pick.dataset.pick);
+
+    const trait = t.closest('[data-trait]');
+    if (trait) {
+      const id = trait.dataset.trait;
+      if (selectedTraits.has(id)) selectedTraits.delete(id);
+      else selectedTraits.add(id);
+      traitsOpen = true;
+      return renderVerdict($('#verdict-search')?.value || '');
+    }
+    if (t.closest('[data-clear-traits]')) {
+      selectedTraits.clear();
+      traitsOpen = true;
+      return renderVerdict($('#verdict-search')?.value || '');
+    }
 
     if (t.closest('[data-manual]')) return renderManualPicker();
 

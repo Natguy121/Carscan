@@ -655,6 +655,66 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .xp-breakdown em { font-style: normal; color: var(--accent); font-family: var(--mono); }
 .levelup { margin-top: .8rem; font-family: var(--mono); color: var(--r-legendary); letter-spacing: .1em; }
+/* ------------------------------------------------- narrow-it-down traits */
+
+.traits {
+  text-align: left;
+  margin: .7rem 0 .2rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+.traits > summary {
+  cursor: pointer;
+  padding: .6rem .75rem;
+  font-size: .82rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  list-style: none;
+}
+.traits > summary::-webkit-details-marker { display: none; }
+.traits > summary::after {
+  content: '▾';
+  color: var(--muted);
+  font-size: .7rem;
+  transition: transform .15s ease;
+}
+.traits[open] > summary::after { transform: rotate(180deg); }
+.trait-count {
+  font-family: var(--mono);
+  font-size: .7rem;
+  color: var(--accent);
+  margin-left: auto;
+}
+.trait-count.muted { color: var(--muted); }
+
+.trait-group { padding: 0 .75rem .55rem; }
+.trait-group-label {
+  font-family: var(--mono); font-size: .62rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted); margin: .35rem 0 .4rem;
+}
+.trait-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.trait-chip {
+  font: inherit;
+  font-size: .74rem;
+  padding: .3rem .6rem;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.trait-chip:hover { border-color: var(--accent); }
+.trait-chip.is-on {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-small { font-size: .74rem; padding: .35rem .8rem; margin: 0 .75rem .7rem; }
+
 .taught {
   margin-top: .7rem; font-family: var(--mono); font-size: .72rem;
   letter-spacing: .08em; color: var(--accent);

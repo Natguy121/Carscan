@@ -28,6 +28,13 @@ G80 M3 are separate catches.
    commonest on the road. When the body-style guess is shaky the list widens and
    says so.
 
+   **Can't see it in the list? Narrow it down.** Thirty things you can check
+   from the pavement — two doors, sits up high, Japanese badge, diesel clatter,
+   V8 rumble, seven seats, looks pre-1990 — each one a filter over the whole
+   index. Ticking *sits up high + Japanese + diesel + seven seats* takes 898 cars
+   down to three, and the Fortuner is one of them, even though the body-style
+   shortlist never offered it. Your eyes can read a badge; the model can't.
+
    **Whatever you tap, it learns.** Confirming a car files that photo's
    fingerprint under it, and the next time you scan something similar the app
    recognises it on its own — "Recognised from memory" — and puts that car at the
@@ -79,16 +86,18 @@ npm test
 
 Covers the recognition mapping (ImageNet classes → body style, weighted by
 confidence; telling a car photo from a non-car one), the shortlist ranking
-(body style outranking history, history outranking commonness), the learned
-memory (recognising a car from a similar photo, refusing to match an unrelated
-one, staying inside its storage budget), and database integrity — every entry
-unique, well formed, and using a real body style and rarity.
+(body style outranking history, history outranking commonness), the thirty
+traits (each one splits the index, ticks combine, dead ends are never offered),
+the learned memory (recognising a car from a similar photo, refusing to match an
+unrelated one, staying inside its storage budget), and database integrity —
+every entry unique, well formed, and using a real body style and rarity.
 
 ## How identification works
 
 | File | Role |
 | --- | --- |
 | `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `looksLikeVehicle` decides whether the photo has a car in it at all. Both are pure functions, easy to test without a model. |
+| `js/traits.js` | The thirty things to look for. Every one is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec asked as a question you can answer by looking. Traits that would empty the list, or that every remaining car shares, are hidden as you narrow. |
 | `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. |
 | `js/match.js` | Builds the shortlist: body style first, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
 | `js/cars.js` | The 898 cars and their specifications. |
