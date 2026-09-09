@@ -21,7 +21,7 @@ export const TRAIT_GROUPS = [
 
 export const TRAITS = [
   // ------------------------------------------------------------------ shape
-  { id: 'two-doors', group: 'shape', label: 'Two doors', test: (c) => c.body === 'coupe' || c.body === 'convertible' },
+  { id: 'two-doors', group: 'shape', label: 'Coupe or convertible shape', test: (c) => c.body === 'coupe' || c.body === 'convertible' },
   { id: 'open-top', group: 'shape', label: 'Roof comes off', test: (c) => c.body === 'convertible' },
   { id: 'tall', group: 'shape', label: 'Sits up high', test: (c) => c.body === 'suv' || c.body === 'pickup' },
   { id: 'bed', group: 'shape', label: 'Has a bed', test: (c) => c.body === 'pickup' },
