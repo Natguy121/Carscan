@@ -1,0 +1,11 @@
+{
+  "name": "carscan",
+  "version": "1.0.0",
+  "description": "Scan a car with your camera, identify it, and collect it in an index of specs.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test test/*.test.mjs"
+  }
+}

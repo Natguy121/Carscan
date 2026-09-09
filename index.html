@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<title>CARSCAN — scan cars, build the index</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">CAR<span>SCAN</span></span>
+    </div>
+    <div class="level-block">
+      <div class="level-line">
+        <span class="level-badge" id="level-badge">LV 1</span>
+        <span class="xp-text" id="xp-text">0 / 70 XP</span>
+      </div>
+      <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ------------------------------------------------------------ SCAN -->
+    <section class="view" id="view-scan">
+      <div class="stage">
+        <video id="cam" playsinline muted autoplay></video>
+        <div class="stage-empty" id="stage-empty">
+          <div class="stage-empty-inner">
+            <p class="stage-empty-title">Camera off</p>
+            <p class="stage-empty-sub" id="stage-empty-sub">Start the camera to scan a car, or upload photos.</p>
+            <button class="btn btn-primary" id="btn-start-cam">Start camera</button>
+          </div>
+        </div>
+        <div class="reticle" aria-hidden="true">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+          <span class="scanline"></span>
+        </div>
+        <div class="stage-hint" id="stage-hint">Capture the <strong>front</strong> of the car</div>
+      </div>
+
+      <div class="angles" id="angles"></div>
+
+      <div class="scan-controls">
+        <button class="btn btn-ghost" id="btn-upload-trigger" title="Add a photo from your device">Upload</button>
+        <button class="shutter" id="btn-capture" aria-label="Capture this angle"><span></span></button>
+        <button class="btn btn-ghost" id="btn-clear" disabled>Clear</button>
+      </div>
+      <input type="file" id="file-input" accept="image/*" multiple hidden>
+
+      <button class="btn btn-primary btn-identify" id="btn-identify" disabled>
+        Identify car
+      </button>
+      <p class="scan-note" id="scan-note">More angles means a more confident match.</p>
+    </section>
+
+    <!-- ----------------------------------------------------------- INDEX -->
+    <section class="view" id="view-index" hidden>
+      <div class="index-head">
+        <div>
+          <h2>The Cardex</h2>
+          <p class="muted" id="index-progress">0 of 0 discovered</p>
+        </div>
+        <div class="ring" id="completion-ring"></div>
+      </div>
+      <div class="filters" id="filters"></div>
+      <div class="grid" id="grid"></div>
+    </section>
+
+    <!-- ---------------------------------------------------------- GARAGE -->
+    <section class="view" id="view-garage" hidden>
+      <h2>Garage</h2>
+      <div class="stats" id="stats"></div>
+
+      <h3 class="section-title">Achievements</h3>
+      <div class="achievements" id="achievements"></div>
+
+      <h3 class="section-title">Rarity breakdown</h3>
+      <div class="rarity-bars" id="rarity-bars"></div>
+
+      <h3 class="section-title">Settings</h3>
+      <div class="settings">
+        <label class="field">
+          <span class="field-label">Google Cloud Vision API key</span>
+          <input type="password" id="api-key" placeholder="AIza…" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="muted small">
+          Identification uses Google Cloud Vision <strong>Web Detection</strong> — the reverse-image
+          lookup behind Lens-style results. The key is stored only in this browser and is sent
+          straight to Google. Restrict it to the Vision API and to your own site.
+          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Get a key</a>
+        </p>
+        <div class="settings-actions">
+          <button class="btn btn-primary" id="btn-save-key">Save key</button>
+          <button class="btn btn-danger" id="btn-reset">Reset all progress</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab is-active" data-view="scan"><span class="tab-ico">◎</span>Scan</button>
+    <button class="tab" data-view="index"><span class="tab-ico">▦</span>Cardex</button>
+    <button class="tab" data-view="garage"><span class="tab-ico">★</span>Garage</button>
+  </nav>
+</div>
+
+<!-- Result of a scan: analysis, then the verdict -->
+<div class="overlay" id="result-overlay" hidden>
+  <div class="overlay-sheet" id="result-sheet" role="dialog" aria-modal="true" aria-label="Scan result"></div>
+</div>
+
+<!-- A car's full spec sheet -->
+<div class="overlay" id="detail-overlay" hidden>
+  <div class="overlay-sheet" id="detail-sheet" role="dialog" aria-modal="true" aria-label="Car details"></div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
