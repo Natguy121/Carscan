@@ -63,6 +63,12 @@ Push, then in the repository settings enable Pages from your branch's root.
 Pages serves over HTTPS, so the camera works. Every player enters their own key
 on their own device; nothing is shared.
 
+### Deploying to Render
+
+`render.yaml` declares this as a static site with no build step, so Render's
+Blueprint deploy (New → Blueprint) picks it up automatically. Render's static
+sites are served over HTTPS by default, so the camera works there too.
+
 ## Tests
 
 ```bash

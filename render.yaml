@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: carscan
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: .
+    pullRequestPreviewsEnabled: false
