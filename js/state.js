@@ -1,6 +1,6 @@
 // Save file: what you have caught, your photos of it, XP and achievements.
 
-import { CARS, CARS_BY_ID, RARITY, BODIES, WILD } from './cars.js';
+import { CARS, CARS_BY_ID, RARITY, BODIES } from './cars.js';
 
 const SAVE_KEY = 'carscan.save.v1';
 
@@ -16,7 +16,10 @@ function load() {
     return {
       xp: parsed.xp || 0,
       scans: parsed.scans || 0,
-      entries: parsed.entries || {},
+      // Older saves could hold hand-typed entries; the index is the index now.
+      entries: Object.fromEntries(
+        Object.entries(parsed.entries || {}).filter(([id]) => CARS_BY_ID.has(id)),
+      ),
       achievements: parsed.achievements || [],
       created: parsed.created || Date.now(),
     };
@@ -64,22 +67,13 @@ export function isDiscovered(carId) {
   return Boolean(state.entries[carId]);
 }
 
-/** Entries backed by a spec sheet in the index. */
+/** Every car you have caught. */
 export function knownIds() {
-  return Object.keys(state.entries).filter((id) => CARS_BY_ID.has(id));
-}
-
-/** Cars you typed in by hand that the index has no spec sheet for. */
-export function wildIds() {
-  return Object.keys(state.entries).filter((id) => !CARS_BY_ID.has(id));
+  return Object.keys(state.entries);
 }
 
 export function discoveredCount() {
   return knownIds().length;
-}
-
-export function wildCount() {
-  return wildIds().length;
 }
 
 export function completion() {
@@ -113,14 +107,14 @@ export function levelInfo(xp = state.xp) {
  * Log a confirmed catch.
  * @returns {{isNew:boolean, xp:number, breakdown:{label:string,value:number}[], levelUp:number|null, unlocked:object[]}}
  */
-export function recordCatch(carId, { photo = null, color = null, wild = null } = {}) {
+export function recordCatch(carId, { photo = null, color = null } = {}) {
   const car = CARS_BY_ID.get(carId);
-  if (!car && !wild) throw new Error(`unknown car ${carId}`);
+  if (!car) throw new Error(`unknown car ${carId}`);
 
   const before = levelInfo().level;
   const existing = state.entries[carId];
   const isNew = !existing;
-  const tier = car ? RARITY[car.rarity] : WILD;
+  const tier = RARITY[car.rarity];
   const base = tier.xp;
   const breakdown = [];
 
@@ -140,7 +134,6 @@ export function recordCatch(carId, { photo = null, color = null, wild = null } =
   if (color && !entry.colors.includes(color)) entry.colors.push(color);
   // The first photo you took of a car is the one the Cardex keeps.
   if (photo && !entry.photos.length) entry.photos = [photo];
-  if (wild) entry.wild = wild;
   state.entries[carId] = entry;
 
   state.xp += gained;

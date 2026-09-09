@@ -4,19 +4,16 @@ Point your camera at a car, take one photo, and pick it out of a shortlist —
 then it's filed in your index with the full specification. A Pokédex for
 traffic.
 
-188 real cars, from the Toyota Corolla to the Bugatti Chiron, each with engine,
-power, torque, 0–60, top speed, drivetrain, weight and origin. Cars you have not
+460 real cars across 71 makes, from the Toyota Corolla to the Bugatti Chiron,
+each with engine, power, torque, 0–60, top speed, drivetrain, weight and origin.
+Every figure is a real published spec — nothing is invented. Cars you have not
 found yet show only a silhouette of their body style.
 
-The set is weighted towards what is actually parked outside: the best-selling
-saloons, crossovers, pickups and vans of North America and Europe, from the
-Kia Sorento and Tesla Model Y to the Dacia Sandero and Vauxhall Corsa — plus the
-exotics worth the walk across the car park.
-
-Anything else you point it at still counts. A car that isn't in the index can
-be typed in by hand and enters as a **Wild** catch — the name, your photo, the
-colour and the date, without the numbers — so no scan of a real car is ever
-turned away.
+The set covers what is actually parked outside — the best-selling saloons,
+crossovers, pickups and vans of North America and Europe — plus the cars worth
+crossing a car park for: JDM heroes, European classics, American muscle, and the
+hypercars. Many nameplates appear across several generations, so an E30 M3 and a
+G80 M3 are separate catches.
 
 ## How it plays
 
@@ -25,12 +22,12 @@ turned away.
    no internet round trip — and guesses the car's body style (SUV, pickup,
    sedan…) and reads its colour off the photo.
 3. **Confirm.** You get a shortlist of cars matching that body style, commonest
-   first, and tap the right one. On-device recognition can spot a shape; it
-   can't read a badge, so you always make the final call.
+   first, and tap the right one — or type in the search box to find any of the
+   460. On-device recognition can spot a shape; it can't read a badge, so you
+   always make the final call.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo
    of it, the colour you caught it in, and the date. Rarer cars are worth more
-   XP. Not in the list? Type its name and it's logged as a Wild catch instead.
-   Only a photo with no car in it at all is turned away.
+   XP. A photo with no car in it at all is turned away.
 
 Rarity runs Common → Uncommon → Rare → Epic → Legendary, and reflects how often
 you would actually see the car on the road, not how good it is. There are eleven
@@ -83,7 +80,7 @@ then commonness), and database integrity.
 | --- | --- |
 | `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. Maps its ImageNet classes to a body style (`inferBodyFromPredictions`) and decides whether the photo has a car in it at all (`looksLikeVehicle`) — both pure functions, easy to test without a model. |
 | `js/match.js` | Builds the shortlist: cars matching the guessed body style first, then ranked by rarity so the common ones you're actually likely to see come first. |
-| `js/cars.js` | The 188 cars and their specifications. |
+| `js/cars.js` | The 460 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
 
@@ -94,11 +91,13 @@ vision API, so the app leans into it: it narrows the shape, you make the call.
 
 ## Adding cars
 
-You do not have to — anything the index does not know can be typed in and
-caught as a Wild entry. Adding a car to `CARS` in `js/cars.js` is how it gains a
-*spec sheet* and a place in the index proper. The fields are self-explanatory;
-`rarity` must be one of the five tiers and `body` one of the keys in `BODIES`.
-`npm test` checks new entries are well formed.
+Append to `CARS` in `js/cars.js`. The fields are self-explanatory; `rarity` must
+be one of the five tiers and `body` one of the keys in `BODIES`. `npm test`
+checks every entry is well formed, uniquely identified, and uses a real body
+style and rarity.
+
+Only add specifications you can verify. The point of the Cardex is that the
+numbers on a spec sheet are true.
 
 ## Privacy
 

@@ -3,7 +3,7 @@ import { classifyImage, looksLikeVehicle, inferBodyFromPredictions, topLabel, Cl
 import { candidatesForBody } from './match.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
-  getState, entryFor, isDiscovered, discoveredCount, wildIds, wildCount, completion,
+  getState, entryFor, isDiscovered, discoveredCount, completion,
   levelInfo, recordCatch, resetProgress, ACHIEVEMENTS, hasAchievement,
 } from './state.js';
 import { carCard, specSheet, candidateRow, achievementTile, rarityPill, esc } from './ui.js';
@@ -13,33 +13,6 @@ const $ = (sel) => document.querySelector(sel);
 let capture = null;
 let filter = 'all';
 let lastResult = null;
-
-// ------------------------------------------------------- wild (unlisted) cars
-
-/** Stable id for a car the index has no entry for, so repeat sightings stack. */
-function wildId(name) {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return `wild:${slug || 'car'}`;
-}
-
-/** A player-typed name is one free-text string; the card wants a make and a model. */
-function splitName(name) {
-  const trimmed = name.trim();
-  const i = trimmed.indexOf(' ');
-  return i === -1 ? { make: '', model: trimmed } : { make: trimmed.slice(0, i), model: trimmed.slice(i + 1) };
-}
-
-function wildCar(id, wild) {
-  return { id, ...splitName(wild.name), name: wild.name, body: wild.body || 'sedan', rarity: 'wild', wild: true };
-}
-
-function wildCars() {
-  return wildIds().map((id) => wildCar(id, entryFor(id)?.wild || { name: id.slice(5), body: 'sedan' }));
-}
-
-function nameMarkup(car) {
-  return car.wild ? `<strong>${esc(car.name)}</strong>` : `${esc(car.make)} <strong>${esc(car.model)}</strong>`;
-}
 
 // ------------------------------------------------------------------ toasts
 
@@ -197,7 +170,16 @@ const BODY_LABEL = {
   wagon: 'wagon', suv: 'SUV', pickup: 'pickup truck', van: 'van', minivan: 'minivan',
 };
 
-function renderVerdict() {
+/** Cars whose name or country contains the query. */
+function searchCars(query, limit) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return CARS
+    .filter((c) => displayName(c).toLowerCase().includes(q) || c.country.toLowerCase().includes(q))
+    .slice(0, limit);
+}
+
+function renderVerdict(query = '') {
   const { body, label } = lastResult;
 
   if (!looksLikeVehicle(lastResult.predictions)) {
@@ -212,70 +194,66 @@ function renderVerdict() {
     return;
   }
 
-  const candidates = candidatesForBody(body);
-  const guess = body ? `Looks like a ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.` : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
+  // No query means the body-style shortlist; typing searches the whole index,
+  // which matters now the index is far too big to scroll.
+  const searching = Boolean(query.trim());
+  const candidates = searching ? searchCars(query, 20) : candidatesForBody(body);
+  const guess = body
+    ? `Looks like a ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.`
+    : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="verdict">
       <p class="verdict-kicker">${esc(label || 'Car detected')}</p>
       <h2>Which one is it?</h2>
-      <p class="muted">${esc(guess)} Recognition runs on this device, so it can't read the exact make and model — pick the right one.</p>
-      <div class="candidates">${candidates.map((car) => candidateRow({ car })).join('')}</div>
-      <button class="btn btn-ghost" data-manual>Search the whole index</button>
-      <button class="btn btn-ghost" data-name-it>Not listed — type its name</button>
+      <p class="muted">${esc(guess)} Recognition runs on this device, so it can't read the exact make and model — pick the right one, or search all ${CARS.length}.</p>
+      <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
+             value="${esc(query)}" autocomplete="off">
+      <div class="candidates">
+        ${candidates.length
+          ? candidates.map((car) => candidateRow({ car })).join('')
+          : '<p class="muted">Nothing matches that.</p>'}
+      </div>
     </div>`);
+
+  if (searching) {
+    const input = $('#verdict-search');
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
 }
 
 function renderManualPicker(query = '') {
-  const q = query.trim().toLowerCase();
-  const list = CARS
-    .filter((c) => !q || displayName(c).toLowerCase().includes(q) || c.country.toLowerCase().includes(q))
-    .slice(0, 40);
+  const list = query.trim() ? searchCars(query, 40) : candidatesForBody(null, 40);
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="verdict">
       <p class="verdict-kicker">Log it yourself</p>
       <h2>Search the index</h2>
-      <input class="search" id="manual-search" type="search" placeholder="Make or model…" value="${esc(query)}" autocomplete="off">
+      <input class="search" id="manual-search" type="search" placeholder="Search all ${CARS.length} cars…" value="${esc(query)}" autocomplete="off">
       <div class="candidates">
         ${list.length
           ? list.map((car) => candidateRow({ car })).join('')
           : '<p class="muted">Nothing matches that.</p>'}
       </div>
-      <button class="btn btn-ghost" data-name-it>Still not there — type its name</button>
     </div>`);
   const input = $('#manual-search');
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
-function renderNameIt() {
-  openOverlay('result', `
-    <button class="sheet-close" data-close aria-label="Close">✕</button>
-    <div class="verdict">
-      <p class="verdict-kicker">Log it yourself</p>
-      <h2>What is it?</h2>
-      <p class="muted">Type the make and model. It'll be added as a Wild catch, without a spec sheet.</p>
-      <input class="search" id="name-it-input" type="text" placeholder="e.g. Lada Niva" autocomplete="off">
-      <button class="btn btn-primary btn-lg" id="name-it-confirm" disabled>Add to Cardex</button>
-    </div>`);
-  const input = $('#name-it-input');
-  input.focus();
-  $('#name-it-confirm').disabled = true;
-}
 
 // --------------------------------------------------------------- log a car
 
-function logCar(carId, wild = null) {
-  const car = wild ? wildCar(carId, wild) : CARS_BY_ID.get(carId);
+function logCar(carId) {
+  const car = CARS_BY_ID.get(carId);
   if (!car) return;
 
   const result = recordCatch(carId, {
     photo: capture?.thumb || null,
     color: capture?.color || null,
-    wild,
   });
 
   renderHeader();
@@ -284,7 +262,7 @@ function logCar(carId, wild = null) {
     <div class="reward" data-rarity="${car.rarity}">
       ${result.isNew ? '<p class="new-flag">NEW ENTRY</p>' : ''}
       <div class="reward-art">${capture ? `<img src="${esc(capture.thumb)}" alt="">` : ''}</div>
-      <h2 class="verdict-name">${nameMarkup(car)}</h2>
+      <h2 class="verdict-name">${esc(car.make)} <strong>${esc(car.model)}</strong></h2>
       ${rarityPill(car.rarity)}
       <div class="xp-gain">+${result.xp} XP</div>
       <ul class="xp-breakdown">
@@ -306,14 +284,12 @@ function logCar(carId, wild = null) {
 
 // -------------------------------------------------------------- index view
 
-const RARITY_ORDER = [...Object.keys(RARITY), 'wild'];
+const RARITY_ORDER = Object.keys(RARITY);
 const rarityRank = (car) => RARITY_ORDER.indexOf(car.rarity);
 
 function renderIndex() {
   const found = discoveredCount();
-  const wild = wildCount();
-  $('#index-progress').textContent =
-    `${found} of ${CARS.length} discovered${wild ? ` · ${wild} wild` : ''}`;
+  $('#index-progress').textContent = `${found} of ${CARS.length} discovered`;
   $('#completion-ring').style.setProperty('--pct', `${Math.round(completion() * 100)}%`);
   $('#completion-ring').dataset.label = `${Math.round(completion() * 100)}%`;
 
@@ -322,18 +298,16 @@ function renderIndex() {
     ['found', 'Found'],
     ['missing', 'Missing'],
     ...Object.entries(RARITY).map(([k, v]) => [k, v.label]),
-    ...(wild ? [['wild', 'Wild']] : []),
   ];
   $('#filters').innerHTML = filters
     .map(([key, label]) => `<button class="chip-btn${filter === key ? ' is-active' : ''}" data-filter="${key}">${esc(label)}</button>`)
     .join('');
 
-  // Wild catches have no slot in the index, so they follow the known cars.
-  const visible = [...CARS, ...wildCars()]
+  const visible = CARS
     .filter((car) => {
       if (filter === 'all') return true;
       if (filter === 'found') return isDiscovered(car.id);
-      if (filter === 'missing') return !car.wild && !isDiscovered(car.id);
+      if (filter === 'missing') return !isDiscovered(car.id);
       return car.rarity === filter;
     })
     // Ordered by rarity so the grid reads commonest-first whatever order the
@@ -358,7 +332,6 @@ function renderGarage() {
     ['Level', level],
     ['Total XP', state.xp.toLocaleString()],
     ['Cars found', `${found} / ${CARS.length}`],
-    ['Wild catches', wildCount()],
     ['Total scans', state.scans],
     ['Best find', bestRarity ? RARITY[bestRarity].label : '—'],
     ['Completion', `${Math.round(completion() * 100)}%`],
@@ -383,10 +356,9 @@ function renderGarage() {
 // -------------------------------------------------------------- car detail
 
 function openCar(carId) {
-  const entry = entryFor(carId);
-  const car = CARS_BY_ID.get(carId) || (entry?.wild && wildCar(carId, entry.wild));
+  const car = CARS_BY_ID.get(carId);
   if (!car) return;
-  openOverlay('detail', specSheet(car, entry));
+  openOverlay('detail', specSheet(car, entryFor(carId)));
 }
 
 // ----------------------------------------------------------------- wiring
@@ -445,13 +417,6 @@ function wire() {
     if (pick) return logCar(pick.dataset.pick);
 
     if (t.closest('[data-manual]')) return renderManualPicker();
-    if (t.closest('[data-name-it]')) return renderNameIt();
-
-    if (t.id === 'name-it-confirm') {
-      const name = $('#name-it-input').value.trim();
-      if (!name) return;
-      return logCar(wildId(name), { name, body: lastResult?.body || null });
-    }
 
     if (t.closest('[data-rescan]')) {
       closeOverlay('result');
@@ -467,16 +432,7 @@ function wire() {
 
   document.addEventListener('input', (e) => {
     if (e.target.id === 'manual-search') renderManualPicker(e.target.value);
-    if (e.target.id === 'name-it-input') {
-      const btn = $('#name-it-confirm');
-      if (btn) btn.disabled = !e.target.value.trim();
-    }
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.target.id === 'name-it-input' && e.target.value.trim()) {
-      $('#name-it-confirm')?.click();
-    }
+    if (e.target.id === 'verdict-search') renderVerdict(e.target.value);
   });
 
   // Click the backdrop or press Escape to dismiss.
