@@ -1,6 +1,6 @@
 // Save file: what you have caught, your photos of it, XP and achievements.
 
-import { CARS, CARS_BY_ID, RARITY, BODIES } from './cars.js';
+import { CARS, CARS_BY_ID, RARITY, BODIES, WILD } from './cars.js';
 
 const SAVE_KEY = 'carscan.save.v1';
 
@@ -64,8 +64,22 @@ export function isDiscovered(carId) {
   return Boolean(state.entries[carId]);
 }
 
+/** Entries backed by a spec sheet in the index. */
+export function knownIds() {
+  return Object.keys(state.entries).filter((id) => CARS_BY_ID.has(id));
+}
+
+/** Cars Google named that the index has no spec sheet for. */
+export function wildIds() {
+  return Object.keys(state.entries).filter((id) => !CARS_BY_ID.has(id));
+}
+
 export function discoveredCount() {
-  return Object.keys(state.entries).length;
+  return knownIds().length;
+}
+
+export function wildCount() {
+  return wildIds().length;
 }
 
 export function completion() {
@@ -99,20 +113,21 @@ export function levelInfo(xp = state.xp) {
  * Log a confirmed catch.
  * @returns {{isNew:boolean, xp:number, breakdown:{label:string,value:number}[], levelUp:number|null, unlocked:object[]}}
  */
-export function recordCatch(carId, { photo = null, color = null } = {}) {
+export function recordCatch(carId, { photo = null, color = null, wild = null } = {}) {
   const car = CARS_BY_ID.get(carId);
-  if (!car) throw new Error(`unknown car ${carId}`);
+  if (!car && !wild) throw new Error(`unknown car ${carId}`);
 
   const before = levelInfo().level;
   const existing = state.entries[carId];
   const isNew = !existing;
-  const base = RARITY[car.rarity].xp;
+  const tier = car ? RARITY[car.rarity] : WILD;
+  const base = tier.xp;
   const breakdown = [];
 
   let gained;
   if (isNew) {
     gained = base * 3;
-    breakdown.push({ label: `New ${RARITY[car.rarity].label} discovery`, value: gained });
+    breakdown.push({ label: `New ${tier.label} discovery`, value: gained });
   } else {
     gained = Math.round(base * 0.25);
     breakdown.push({ label: 'Repeat sighting', value: gained });
@@ -125,6 +140,7 @@ export function recordCatch(carId, { photo = null, color = null } = {}) {
   if (color && !entry.colors.includes(color)) entry.colors.push(color);
   // The first photo you took of a car is the one the Cardex keeps.
   if (photo && !entry.photos.length) entry.photos = [photo];
+  if (wild) entry.wild = wild;
   state.entries[carId] = entry;
 
   state.xp += gained;
@@ -157,14 +173,14 @@ export const ACHIEVEMENTS = [
     id: 'unicorn',
     name: 'Unicorn',
     hint: 'Catch a Legendary',
-    test: () => discoveredIds().some((id) => CARS_BY_ID.get(id).rarity === 'legendary'),
+    test: () => knownIds().some((id) => CARS_BY_ID.get(id).rarity === 'legendary'),
   },
   {
     id: 'spectrum',
     name: 'Full Spectrum',
     hint: 'Catch one car of every rarity',
     test: () => {
-      const seen = new Set(discoveredIds().map((id) => CARS_BY_ID.get(id).rarity));
+      const seen = new Set(knownIds().map((id) => CARS_BY_ID.get(id).rarity));
       return Object.keys(RARITY).every((r) => seen.has(r));
     },
   },
@@ -173,7 +189,7 @@ export const ACHIEVEMENTS = [
     name: 'Body of Work',
     hint: 'Catch every body style',
     test: () => {
-      const seen = new Set(discoveredIds().map((id) => CARS_BY_ID.get(id).body));
+      const seen = new Set(knownIds().map((id) => CARS_BY_ID.get(id).body));
       return Object.keys(BODIES).every((b) => seen.has(b));
     },
   },
@@ -181,13 +197,13 @@ export const ACHIEVEMENTS = [
     id: 'rising-sun',
     name: 'Rising Sun',
     hint: 'Catch 5 Japanese cars',
-    test: () => discoveredIds().filter((id) => CARS_BY_ID.get(id).country === 'Japan').length >= 5,
+    test: () => knownIds().filter((id) => CARS_BY_ID.get(id).country === 'Japan').length >= 5,
   },
   {
     id: 'grand-tour',
     name: 'Grand Tour',
     hint: 'Catch cars from 6 countries',
-    test: () => new Set(discoveredIds().map((id) => CARS_BY_ID.get(id).country)).size >= 6,
+    test: () => new Set(knownIds().map((id) => CARS_BY_ID.get(id).country)).size >= 6,
   },
   { id: 'odometer', name: 'Odometer', hint: 'Complete 100 scans', test: (s) => s.scans >= 100 },
   {
@@ -197,10 +213,6 @@ export const ACHIEVEMENTS = [
     test: () => discoveredCount() >= CARS.length,
   },
 ];
-
-function discoveredIds() {
-  return Object.keys(state.entries);
-}
 
 function checkAchievements() {
   const unlocked = [];

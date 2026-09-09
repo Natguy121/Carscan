@@ -7,6 +7,11 @@ Eighty real cars, from the Toyota Corolla to the Bugatti Chiron, each with
 engine, power, torque, 0–60, top speed, drivetrain, weight and origin. Cars you
 have not found yet show only a silhouette of their body style.
 
+Anything else you point it at still counts. A car Google can name but the index
+has no data for enters as a **Wild** catch — the name, your photo, the colour
+and the date, without the numbers — so no scan of a real car is ever turned
+away.
+
 ## How it plays
 
 1. **Take one photo.** Stand back, fit the whole car in frame, tap the shutter.
@@ -19,6 +24,9 @@ have not found yet show only a silhouette of their body style.
    the game hands you the shortlist and you settle it.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo of
    it, the colour you caught it in, and the date. Rarer cars are worth more XP.
+   If it is not one of the eighty, it enters as a Wild catch instead, with its
+   silhouette taken from the body style Google described. Only a photo with no
+   car in it is refused.
 
 Rarity runs Common → Uncommon → Rare → Epic → Legendary, and reflects how often
 you would actually see the car on the road, not how good it is. There are eleven
@@ -73,7 +81,7 @@ npm test
 ```
 
 Covers the identification pipeline against realistic Vision responses: a
-confident hit, nicknames, the best-guess label outweighing a lower-ranked
+confident hit, wild catches and the body style inferred for them, nicknames, the best-guess label outweighing a lower-ranked
 entity, trim ambiguity, cars outside the database resolving to *unknown* rather
 than to a wrong match, model-year disambiguation between generations, hyphen and
 spacing variants of model codes, and database integrity.
@@ -85,6 +93,7 @@ spacing variants of model codes, and database integrity.
 | `js/vision.js` | Calls Vision Web Detection, then folds the best-guess label and web entities into phrase and token tallies. The best guess carries the most weight; entity weights decay by rank. |
 | `js/match.js` | Scores the fused text against the database. Rare tokens count for more (inverse document frequency), a phrase carrying both make and model counts for much more, and a phrase equal to a car's whole name is decisive. |
 | `js/cars.js` | The 80 cars and their specifications. |
+| Wild catches | `inferBody` reads the body style out of Google's own wording ("Sport utility vehicle" → SUV) to pick a silhouette, and `looksLikeCar` checks the frame was a car at all before offering the catch. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
 
@@ -94,8 +103,10 @@ is deliberate — a confident wrong answer is worse than an honest shortlist.
 
 ## Adding cars
 
-Append to `CARS` in `js/cars.js`. The fields are self-explanatory; `rarity` must
-be one of the five tiers and `body` one of the keys in `BODIES`. If the car is
+You do not have to — anything the index does not know is caught as a Wild
+entry. Adding a car is how it gains a *spec sheet*. Append to `CARS` in
+`js/cars.js`; the fields are self-explanatory, `rarity` must be one of the five
+tiers and `body` one of the keys in `BODIES`. If the car is
 commonly known by a nickname the make and model do not contain — *Miata*,
 *Hachi-Roku*, *Godzilla* — add it to `ALIASES` in `js/match.js` so Vision's
 wording still finds it. `npm test` checks new entries are well formed.

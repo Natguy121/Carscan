@@ -9,6 +9,9 @@ export const RARITY = {
   legendary: { label: 'Legendary', color: '#fbbf24', xp: 400, weight: 0.02 },
 };
 
+/** Cars Google can name but the index has no spec sheet for. */
+export const WILD = { label: 'Wild', color: '#94a3b8', xp: 10 };
+
 export const BODIES = {
   sedan: 'Sedan',
   coupe: 'Coupe',

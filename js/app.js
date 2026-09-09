@@ -1,9 +1,12 @@
 import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
-import { detectCar, analyseDetection, getApiKey, setApiKey, hasApiKey, VisionError } from './vision.js';
+import {
+  detectCar, analyseDetection, inferBody, looksLikeCar, tokenize,
+  getApiKey, setApiKey, hasApiKey, VisionError,
+} from './vision.js';
 import { rankCandidates, resolve } from './match.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
-  getState, entryFor, isDiscovered, discoveredCount, completion,
+  getState, entryFor, isDiscovered, discoveredCount, wildIds, wildCount, completion,
   levelInfo, recordCatch, resetProgress, ACHIEVEMENTS, hasAchievement,
 } from './state.js';
 import { carCard, specSheet, candidateRow, achievementTile, rarityPill, esc } from './ui.js';
@@ -11,6 +14,33 @@ import { carCard, specSheet, candidateRow, achievementTile, rarityPill, esc } fr
 const $ = (sel) => document.querySelector(sel);
 
 let capture = null;
+
+// ------------------------------------------------------- wild (unlisted) cars
+
+/** Stable id for a car the index has no entry for, so repeat sightings stack. */
+function wildId(name) {
+  const slug = tokenize(name).join('-') || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return `wild:${slug.replace(/^-+|-+$/g, '')}`;
+}
+
+/** Google returns one string; the card wants a make and a model. */
+function splitName(name) {
+  const trimmed = name.trim();
+  const i = trimmed.indexOf(' ');
+  return i === -1 ? { make: '', model: trimmed } : { make: trimmed.slice(0, i), model: trimmed.slice(i + 1) };
+}
+
+function wildCar(id, wild) {
+  return { id, ...splitName(wild.name), name: wild.name, body: wild.body || 'sedan', rarity: 'wild', wild: true };
+}
+
+function wildCars() {
+  return wildIds().map((id) => wildCar(id, entryFor(id)?.wild || { name: id.slice(5), body: 'sedan' }));
+}
+
+function nameMarkup(car) {
+  return car.wild ? `<strong>${esc(car.name)}</strong>` : `${esc(car.make)} <strong>${esc(car.model)}</strong>`;
+}
 let filter = 'all';
 let lastResult = null;
 
@@ -173,12 +203,12 @@ async function onIdentify() {
 
   const reading = analyseDetection(detection);
   const candidates = rankCandidates(reading);
-  lastResult = { ...resolve(reading, candidates), reading };
+  lastResult = { ...resolve(reading, candidates), reading, detection };
   renderVerdict();
 }
 
 function renderVerdict() {
-  const { status, car, candidates, reading, detectedName } = lastResult;
+  const { status, car, candidates, reading, detectedName, detection } = lastResult;
 
   if (status === 'identified') {
     openOverlay('result', `
@@ -211,17 +241,29 @@ function renderVerdict() {
     return;
   }
 
+  // Google named something, and the frame really is a car: it still counts.
+  if (detectedName && looksLikeCar(detection)) {
+    openOverlay('result', `
+      <button class="sheet-close" data-close aria-label="Close">✕</button>
+      <div class="verdict verdict-hit" data-rarity="wild">
+        <p class="verdict-kicker">Identified — no spec sheet on file</p>
+        <h2 class="verdict-name"><strong>${esc(detectedName)}</strong></h2>
+        ${rarityPill('wild')}
+        <p class="verdict-sub">Not one of the ${CARS.length} cars the Cardex carries data for, but the catch counts.</p>
+        <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>
+        <button class="btn btn-primary btn-lg" data-log-wild>Add to Cardex</button>
+        <button class="btn btn-ghost" data-manual>Not right? Search the index</button>
+      </div>`);
+    return;
+  }
+
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="verdict">
-      <p class="verdict-kicker">No match in the Cardex</p>
-      <h2>${detectedName ? esc(detectedName) : 'Could not read the car'}</h2>
-      <p class="muted">
-        ${detectedName
-          ? 'Google read the car, but it is not one of the ' + CARS.length + ' cars in this index.'
-          : 'Try again with the whole car in frame, from more than one angle.'}
-      </p>
-            ${reading.phrases.length ? `<div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>` : ''}
+      <p class="verdict-kicker">No car found</p>
+      <h2>Could not read a car</h2>
+      <p class="muted">Try again with the whole car in frame and well lit.</p>
+      ${reading.phrases.length ? `<div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>` : ''}
       <button class="btn btn-ghost" data-manual>Search the index instead</button>
     </div>`);
 }
@@ -251,13 +293,14 @@ function renderManualPicker(query = '') {
 
 // --------------------------------------------------------------- log a car
 
-function logCar(carId) {
-  const car = CARS_BY_ID.get(carId);
+function logCar(carId, wild = null) {
+  const car = wild ? wildCar(carId, wild) : CARS_BY_ID.get(carId);
   if (!car) return;
 
   const result = recordCatch(carId, {
     photo: capture?.thumb || null,
     color: capture?.color || null,
+    wild,
   });
 
   renderHeader();
@@ -266,7 +309,7 @@ function logCar(carId) {
     <div class="reward" data-rarity="${car.rarity}">
       ${result.isNew ? '<p class="new-flag">NEW ENTRY</p>' : ''}
       <div class="reward-art">${capture ? `<img src="${esc(capture.thumb)}" alt="">` : ''}</div>
-      <h2 class="verdict-name">${esc(car.make)} <strong>${esc(car.model)}</strong></h2>
+      <h2 class="verdict-name">${nameMarkup(car)}</h2>
       ${rarityPill(car.rarity)}
       <div class="xp-gain">+${result.xp} XP</div>
       <ul class="xp-breakdown">
@@ -290,7 +333,9 @@ function logCar(carId) {
 
 function renderIndex() {
   const found = discoveredCount();
-  $('#index-progress').textContent = `${found} of ${CARS.length} discovered`;
+  const wild = wildCount();
+  $('#index-progress').textContent =
+    `${found} of ${CARS.length} discovered${wild ? ` · ${wild} wild` : ''}`;
   $('#completion-ring').style.setProperty('--pct', `${Math.round(completion() * 100)}%`);
   $('#completion-ring').dataset.label = `${Math.round(completion() * 100)}%`;
 
@@ -299,15 +344,17 @@ function renderIndex() {
     ['found', 'Found'],
     ['missing', 'Missing'],
     ...Object.entries(RARITY).map(([k, v]) => [k, v.label]),
+    ...(wild ? [['wild', 'Wild']] : []),
   ];
   $('#filters').innerHTML = filters
     .map(([key, label]) => `<button class="chip-btn${filter === key ? ' is-active' : ''}" data-filter="${key}">${esc(label)}</button>`)
     .join('');
 
-  const visible = CARS.filter((car) => {
+  // Wild catches have no slot in the index, so they follow the known cars.
+  const visible = [...CARS, ...wildCars()].filter((car) => {
     if (filter === 'all') return true;
     if (filter === 'found') return isDiscovered(car.id);
-    if (filter === 'missing') return !isDiscovered(car.id);
+    if (filter === 'missing') return !car.wild && !isDiscovered(car.id);
     return car.rarity === filter;
   });
 
@@ -329,6 +376,7 @@ function renderGarage() {
     ['Level', level],
     ['Total XP', state.xp.toLocaleString()],
     ['Cars found', `${found} / ${CARS.length}`],
+    ['Wild catches', wildCount()],
     ['Total scans', state.scans],
     ['Best find', bestRarity ? RARITY[bestRarity].label : '—'],
     ['Completion', `${Math.round(completion() * 100)}%`],
@@ -355,9 +403,10 @@ function renderGarage() {
 // -------------------------------------------------------------- car detail
 
 function openCar(carId) {
-  const car = CARS_BY_ID.get(carId);
+  const entry = entryFor(carId);
+  const car = CARS_BY_ID.get(carId) || (entry?.wild && wildCar(carId, entry.wild));
   if (!car) return;
-  openOverlay('detail', specSheet(car, entryFor(carId)));
+  openOverlay('detail', specSheet(car, entry));
 }
 
 // ----------------------------------------------------------------- wiring
@@ -423,6 +472,12 @@ function wire() {
     }
     const log = t.closest('[data-log]');
     if (log) return logCar(log.dataset.log);
+
+    if (t.closest('[data-log-wild]')) {
+      const name = lastResult.detectedName;
+      const wild = { name, body: inferBody(lastResult.detection) };
+      return logCar(wildId(name), wild);
+    }
 
     const pick = t.closest('[data-pick]');
     if (pick) return logCar(pick.dataset.pick);

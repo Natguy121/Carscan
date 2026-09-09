@@ -173,6 +173,9 @@ export function analyseDetection(result) {
     if (!key) return;
     const cur = phrases.get(key) || { key, display: text, weight: 0 };
     cur.weight += weight;
+    // Best-guess labels arrive lowercase ("kia sorento") while entities keep
+    // their real casing ("Kia Sorento"); show the reader the better one.
+    if (cur.display === cur.display.toLowerCase() && text !== text.toLowerCase()) cur.display = text;
     phrases.set(key, cur);
   };
 
@@ -196,4 +199,58 @@ export function analyseDetection(result) {
     tokens: new Map(rank(tokens).map((t) => [t.token, t])),
     year: result.year ?? null,
   };
+}
+
+// Body words Vision returns, longest-first so "station wagon" wins over "wagon"
+// and "minivan" over "van".
+const BODY_WORDS = [
+  ['sport utility', 'suv'],
+  ['station wagon', 'wagon'],
+  ['pickup', 'pickup'],
+  ['minivan', 'minivan'],
+  ['hatchback', 'hatchback'],
+  ['convertible', 'convertible'],
+  ['cabriolet', 'convertible'],
+  ['roadster', 'convertible'],
+  ['crossover', 'suv'],
+  ['coupe', 'coupe'],
+  ['coupé', 'coupe'],
+  ['saloon', 'sedan'],
+  ['sedan', 'sedan'],
+  ['estate', 'wagon'],
+  ['wagon', 'wagon'],
+  ['suv', 'suv'],
+  ['van', 'van'],
+];
+
+function rawText(result) {
+  if (!result) return '';
+  return [result.bestGuess, ...result.entities.map((e) => e.name), ...(result.pages || [])]
+    .filter(Boolean)
+    .join(' | ')
+    .toLowerCase();
+}
+
+/**
+ * Body style Google described, used to pick a silhouette for a car the index
+ * has no entry for. Falls back to a sedan, the commonest shape on the road.
+ */
+export function inferBody(result) {
+  const text = rawText(result);
+  for (const [word, body] of BODY_WORDS) {
+    if (text.includes(word)) return body;
+  }
+  return 'sedan';
+}
+
+const VEHICLE_HINT =
+  /\b(car|cars|vehicle|automobile|automotive|motor|sedan|saloon|coupe|coupé|suv|truck|pickup|van|wagon|hatchback|convertible|roadster|bumper|grille|windshield|windscreen|headlamp|headlight|taillight|hubcap|tyre|tire|wheel|hood|bonnet|spoiler)\b/;
+
+/**
+ * Whether the photo is of a car at all. Vision reliably returns several generic
+ * automotive entities for any car photo, so their absence means the frame was
+ * of something else entirely.
+ */
+export function looksLikeCar(result) {
+  return VEHICLE_HINT.test(rawText(result));
 }

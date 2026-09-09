@@ -1,6 +1,6 @@
 // Pure render helpers — every function returns an HTML string.
 
-import { RARITY, BODIES, displayName } from './cars.js';
+import { RARITY, BODIES, WILD, displayName } from './cars.js';
 import { silhouette } from './silhouettes.js';
 
 export function esc(value) {
@@ -10,7 +10,7 @@ export function esc(value) {
 }
 
 export function rarityPill(rarity) {
-  const r = RARITY[rarity];
+  const r = RARITY[rarity] || WILD;
   return `<span class="pill" data-rarity="${rarity}">${esc(r.label)}</span>`;
 }
 
@@ -36,7 +36,7 @@ export function carCard(car, entry) {
         ${found && entry.count > 1 ? `<span class="card-count">×${entry.count}</span>` : ''}
       </div>
       <div class="card-body">
-        <span class="card-make">${found ? esc(car.make) : '???'}</span>
+        <span class="card-make">${found ? esc(car.make || 'Wild') : '???'}</span>
         <span class="card-model">${found ? esc(car.model) : esc(BODIES[car.body])}</span>
       </div>
       <span class="card-rarity" data-rarity="${car.rarity}"></span>
@@ -68,6 +68,7 @@ function specRows(car) {
 /** Full spec sheet for a car, including your own photos of it. */
 export function specSheet(car, entry, { showClose = true } = {}) {
   const found = Boolean(entry);
+  if (car.wild) return wildSheet(car, entry, showClose);
   const gallery = entry?.photos?.length
     ? `<div class="gallery">${entry.photos
         .map((p, i) => `<img src="${esc(p)}" alt="Angle ${i + 1} of your ${esc(displayName(car))}" loading="lazy">`)
@@ -123,4 +124,32 @@ export function achievementTile(achievement, unlocked) {
       <strong>${esc(achievement.name)}</strong>
       <span class="muted small">${esc(achievement.hint)}</span>
     </div>`;
+}
+
+/**
+ * A car Google named that the index has no spec sheet for. It still earns a
+ * real entry — your photo, the colour, the date — just without the numbers.
+ */
+function wildSheet(car, entry, showClose) {
+  const photo = entry?.photos?.[0];
+  return `
+    ${showClose ? '<button class="sheet-close" data-close aria-label="Close">✕</button>' : ''}
+    <div class="sheet-head" data-rarity="wild">
+      <div class="sheet-art">${silhouette(car.body, { className: 'sil' })}</div>
+      <div>
+        ${rarityPill('wild')}
+        <h2 class="sheet-title"><strong>${esc(car.name)}</strong></h2>
+        <p class="sheet-sub">${esc(BODIES[car.body])} · identified by Google</p>
+      </div>
+    </div>
+    ${photo ? `<div class="gallery"><img src="${esc(photo)}" alt="Your photo of the ${esc(car.name)}" loading="lazy"></div>` : ''}
+    <div class="caught">
+      <div><span class="muted small">First caught</span><strong>${formatDate(entry?.firstSeen)}</strong></div>
+      <div><span class="muted small">Sightings</span><strong>${entry?.count ?? 0}</strong></div>
+      <div><span class="muted small">Colours seen</span><strong>${entry?.colors?.length ? esc(entry.colors.join(', ')) : '—'}</strong></div>
+    </div>
+    <p class="undiscovered-note">
+      Specifications are not on file — this one is not among the cars the Cardex
+      carries full data for. The catch still counts.
+    </p>`;
 }
