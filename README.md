@@ -4,7 +4,7 @@ Point your camera at a car, take one photo, and pick it out of a shortlist —
 then it's filed in your index with the full specification. A Pokédex for
 traffic.
 
-897 real cars across 115 makes, from the Toyota Corolla to the Bugatti Chiron,
+898 real cars across 115 makes, from the Toyota Corolla to the Bugatti Chiron,
 each with engine, power, torque, 0–60, top speed, drivetrain, weight and origin.
 Every figure is a real published spec — nothing is invented. Cars you have not
 found yet show only a silhouette of their body style.
@@ -22,7 +22,7 @@ G80 M3 are separate catches.
    no internet round trip — and guesses the car's body style (SUV, pickup,
    sedan…) and reads its colour off the photo.
 3. **Confirm.** You get a shortlist of cars matching that body style and tap the
-   right one — or type in the search box to find any of the 897. The shortlist
+   right one — or type in the search box to find any of the 898. The shortlist
    is ordered by what you're most likely to be looking at: cars you've caught
    before come first, then makes you catch often, then the commonest on the
    road. When the body-style guess is shaky the list widens and says so.
@@ -85,7 +85,7 @@ rarity.
 | --- | --- |
 | `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `looksLikeVehicle` decides whether the photo has a car in it at all. Both are pure functions, easy to test without a model. |
 | `js/match.js` | Builds the shortlist: body style first, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. |
-| `js/cars.js` | The 897 cars and their specifications. |
+| `js/cars.js` | The 898 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
 

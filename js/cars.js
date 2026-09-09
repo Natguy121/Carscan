@@ -738,6 +738,14 @@ export const CARS = [
     blurb: 'Famously indestructible. Top Gear tried very hard and failed.',
   },
   {
+    id: 'toyota-fortuner', make: 'Toyota', model: 'Fortuner', years: '2015–2025',
+    body: 'suv', country: 'Japan', rarity: 'common',
+    engine: '2.8L turbodiesel I4', power: 201, torque: 369,
+    zeroToSixty: 10.7, topSpeed: 112, drivetrain: '4WD', transmission: '6-speed automatic',
+    weight: 4750, mpg: 27, seats: 7,
+    blurb: 'A Hilux wearing an SUV body. The default family car across half the planet, just not North America.',
+  },
+  {
     id: 'toyota-avalon', make: 'Toyota', model: 'Avalon', years: '2019–2022',
     body: 'sedan', country: 'Japan', rarity: 'common',
     engine: '3.5L V6', power: 301, torque: 267,
