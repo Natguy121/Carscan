@@ -76,6 +76,17 @@ export function discoveredCount() {
   return knownIds().length;
 }
 
+/** What the player has caught, for weighting the shortlist toward likely cars. */
+export function catchHistory() {
+  const caughtIds = new Set(knownIds());
+  const makeCounts = new Map();
+  for (const id of caughtIds) {
+    const make = CARS_BY_ID.get(id)?.make;
+    if (make) makeCounts.set(make, (makeCounts.get(make) || 0) + 1);
+  }
+  return { caughtIds, makeCounts };
+}
+
 export function completion() {
   return discoveredCount() / CARS.length;
 }

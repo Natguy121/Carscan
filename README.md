@@ -4,7 +4,7 @@ Point your camera at a car, take one photo, and pick it out of a shortlist —
 then it's filed in your index with the full specification. A Pokédex for
 traffic.
 
-460 real cars across 71 makes, from the Toyota Corolla to the Bugatti Chiron,
+897 real cars across 115 makes, from the Toyota Corolla to the Bugatti Chiron,
 each with engine, power, torque, 0–60, top speed, drivetrain, weight and origin.
 Every figure is a real published spec — nothing is invented. Cars you have not
 found yet show only a silhouette of their body style.
@@ -21,10 +21,13 @@ G80 M3 are separate catches.
 2. **Identify.** A small recognition model runs right there in your browser —
    no internet round trip — and guesses the car's body style (SUV, pickup,
    sedan…) and reads its colour off the photo.
-3. **Confirm.** You get a shortlist of cars matching that body style, commonest
-   first, and tap the right one — or type in the search box to find any of the
-   460. On-device recognition can spot a shape; it can't read a badge, so you
-   always make the final call.
+3. **Confirm.** You get a shortlist of cars matching that body style and tap the
+   right one — or type in the search box to find any of the 897. The shortlist
+   is ordered by what you're most likely to be looking at: cars you've caught
+   before come first, then makes you catch often, then the commonest on the
+   road. When the body-style guess is shaky the list widens and says so.
+   On-device recognition can spot a shape; it can't read a badge, so you always
+   make the final call.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo
    of it, the colour you caught it in, and the date. Rarer cars are worth more
    XP. A photo with no car in it at all is turned away.
@@ -70,17 +73,19 @@ sites are served over HTTPS by default, so the camera works there too.
 npm test
 ```
 
-Covers the recognition mapping (ImageNet classes → body style, and telling a
-car photo from a non-car one), the shortlist ranking (body-style match first,
-then commonness), and database integrity.
+Covers the recognition mapping (ImageNet classes → body style, weighted by
+confidence; telling a car photo from a non-car one), the shortlist ranking
+(body style outranking history, history outranking commonness), and database
+integrity — every entry unique, well formed, and using a real body style and
+rarity.
 
 ## How identification works
 
 | File | Role |
 | --- | --- |
-| `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. Maps its ImageNet classes to a body style (`inferBodyFromPredictions`) and decides whether the photo has a car in it at all (`looksLikeVehicle`) — both pure functions, easy to test without a model. |
-| `js/match.js` | Builds the shortlist: cars matching the guessed body style first, then ranked by rarity so the common ones you're actually likely to see come first. |
-| `js/cars.js` | The 460 cars and their specifications. |
+| `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `looksLikeVehicle` decides whether the photo has a car in it at all. Both are pure functions, easy to test without a model. |
+| `js/match.js` | Builds the shortlist: body style first, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. |
+| `js/cars.js` | The 897 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
 

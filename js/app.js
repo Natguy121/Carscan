@@ -1,9 +1,9 @@
 import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
-import { classifyImage, looksLikeVehicle, inferBodyFromPredictions, topLabel, ClassifyError, warmUp } from './classify.js';
+import { classifyImage, looksLikeVehicle, inferBody, topLabel, ClassifyError, warmUp } from './classify.js';
 import { candidatesForBody } from './match.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
-  getState, entryFor, isDiscovered, discoveredCount, completion,
+  getState, entryFor, isDiscovered, discoveredCount, completion, catchHistory,
   levelInfo, recordCatch, resetProgress, ACHIEVEMENTS, hasAchievement,
 } from './state.js';
 import { carCard, specSheet, candidateRow, achievementTile, rarityPill, esc } from './ui.js';
@@ -161,7 +161,8 @@ async function onIdentify() {
     return;
   }
 
-  lastResult = { predictions, body: inferBodyFromPredictions(predictions), label: topLabel(predictions) };
+  const { body, confidence } = inferBody(predictions);
+  lastResult = { predictions, body, confidence, label: topLabel(predictions) };
   renderVerdict();
 }
 
@@ -180,7 +181,7 @@ function searchCars(query, limit) {
 }
 
 function renderVerdict(query = '') {
-  const { body, label } = lastResult;
+  const { body, label, confidence } = lastResult;
 
   if (!looksLikeVehicle(lastResult.predictions)) {
     openOverlay('result', `
@@ -197,9 +198,15 @@ function renderVerdict(query = '') {
   // No query means the body-style shortlist; typing searches the whole index,
   // which matters now the index is far too big to scroll.
   const searching = Boolean(query.trim());
-  const candidates = searching ? searchCars(query, 20) : candidatesForBody(body);
+  // A shaky body-style guess gets a longer shortlist, since it is likelier the
+  // right car sits just outside the top few.
+  const shortlistSize = confidence >= 0.6 ? 8 : 12;
+  const candidates = searching
+    ? searchCars(query, 20)
+    : candidatesForBody(body, shortlistSize, catchHistory());
+  const hedge = body && confidence < 0.6 ? ' Not certain, so the list is wider.' : '';
   const guess = body
-    ? `Looks like a ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.`
+    ? `Looks like a ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.${hedge}`
     : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
 
   openOverlay('result', `
@@ -225,7 +232,7 @@ function renderVerdict(query = '') {
 }
 
 function renderManualPicker(query = '') {
-  const list = query.trim() ? searchCars(query, 40) : candidatesForBody(null, 40);
+  const list = query.trim() ? searchCars(query, 40) : candidatesForBody(null, 40, catchHistory());
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>

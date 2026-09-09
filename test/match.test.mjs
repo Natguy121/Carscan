@@ -38,6 +38,30 @@ test('respects the requested limit', () => {
   assert.equal(candidatesForBody('sedan', 3).length, 3);
 });
 
+test('a car you have already caught is ranked above one you have not', () => {
+  const plain = candidatesForBody('coupe', 8);
+  const target = CARS.find((c) => c.body === 'coupe' && !plain.includes(c));
+  const withHistory = candidatesForBody('coupe', 8, { caughtIds: new Set([target.id]) });
+  assert.ok(withHistory.includes(target), `${target.id} should surface once caught`);
+  assert.equal(withHistory[0].id, target.id);
+});
+
+test('makes you catch often are favoured within the same body style', () => {
+  const make = CARS.find((c) => c.body === 'suv').make;
+  const ranked = candidatesForBody('suv', 8, { makeCounts: new Map([[make, 5]]) });
+  assert.equal(ranked[0].make, make);
+  assert.ok(ranked.every((c) => c.body === 'suv'));
+});
+
+test('history never promotes a car of the wrong body style', () => {
+  const sedan = CARS.find((c) => c.body === 'sedan');
+  const ranked = candidatesForBody('pickup', 8, {
+    caughtIds: new Set([sedan.id]),
+    makeCounts: new Map([[sedan.make, 99]]),
+  });
+  assert.ok(ranked.every((c) => c.body === 'pickup'), 'body style must outrank history');
+});
+
 test('database entries are well formed and uniquely identified', () => {
   const ids = new Set();
   for (const car of CARS) {
@@ -52,5 +76,5 @@ test('database entries are well formed and uniquely identified', () => {
       assert.equal(typeof car[field], 'number', `${car.id} bad ${field}`);
     }
   }
-  assert.ok(CARS.length >= 180);
+  assert.ok(CARS.length >= 890);
 });

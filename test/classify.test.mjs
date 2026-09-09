@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { looksLikeVehicle, inferBodyFromPredictions, topLabel } from '../js/classify.js';
+import { looksLikeVehicle, inferBody, inferBodyFromPredictions, topLabel } from '../js/classify.js';
 
 /** Build a fake MobileNet prediction list, most confident first. */
 function predictions(...pairs) {
@@ -52,4 +52,30 @@ test('the top label is a readable, title-cased description', () => {
 
 test('no predictions yields no label', () => {
   assert.equal(topLabel([]), null);
+});
+
+test('agreeing weaker guesses outweigh a single stronger disagreeing one', () => {
+  // "sports car" leads on its own, but two wagon-ish classes together beat it.
+  const preds = predictions(
+    ['sports car, sport car', 0.30],
+    ['beach wagon, station wagon', 0.28],
+    ['minivan', 0.00],
+    ['station wagon', 0.10],
+  );
+  assert.equal(inferBodyFromPredictions(preds), 'wagon');
+});
+
+test('confidence reflects how much the vehicle classes agree', () => {
+  const agreed = inferBody(predictions(['pickup, pickup truck', 0.8], ['tow truck, tow car', 0.1]));
+  assert.equal(agreed.body, 'pickup');
+  assert.ok(agreed.confidence > 0.9, `expected high confidence, got ${agreed.confidence}`);
+
+  const split = inferBody(predictions(['sports car, sport car', 0.3], ['minivan', 0.3]));
+  assert.ok(split.confidence <= 0.5, `expected low confidence, got ${split.confidence}`);
+});
+
+test('no vehicle classes means no body style and no confidence', () => {
+  const r = inferBody(predictions(['golden retriever', 0.9]));
+  assert.equal(r.body, null);
+  assert.equal(r.confidence, 0);
 });

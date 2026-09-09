@@ -111,15 +111,39 @@ export function looksLikeVehicle(predictions, threshold = 0.15) {
   );
 }
 
-/** Best-guess body style from the predictions, or null if none maps cleanly. */
-export function inferBodyFromPredictions(predictions) {
+/**
+ * Body style the predictions point to, weighted by confidence.
+ *
+ * MobileNet returns several vehicle classes at once — "sports car" and
+ * "convertible" and "beach wagon" all at some probability. Taking whichever
+ * matched first threw that away; adding each class's probability to its body
+ * style and picking the heaviest uses all of it, so two weak agreeing guesses
+ * can outweigh one slightly stronger disagreeing one.
+ *
+ * @returns {{body: string|null, confidence: number}} confidence is the winner's
+ *   share of all vehicle probability seen, 0–1.
+ */
+export function inferBody(predictions) {
+  const scores = new Map();
+  let total = 0;
   for (const p of predictions) {
     const name = p.className.toLowerCase();
     for (const [keyword, body] of BODY_KEYWORDS) {
-      if (name.includes(keyword)) return body;
+      if (name.includes(keyword)) {
+        scores.set(body, (scores.get(body) || 0) + p.probability);
+        total += p.probability;
+        break; // most specific keyword only — "minivan" must not also count as "van"
+      }
     }
   }
-  return null;
+  if (!scores.size) return { body: null, confidence: 0 };
+  const [body, score] = [...scores].sort((a, b) => b[1] - a[1])[0];
+  return { body, confidence: total ? score / total : 0 };
+}
+
+/** Body style only, for callers that do not need the confidence. */
+export function inferBodyFromPredictions(predictions) {
+  return inferBody(predictions).body;
 }
 
 /** A short, human label for the top prediction — descriptive only, never a car name. */
