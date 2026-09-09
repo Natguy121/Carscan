@@ -66,6 +66,28 @@ export async function classifyImage(el) {
   return model.classify(el, 8);
 }
 
+/**
+ * The photo's fingerprint — the model's second-to-last layer rather than its
+ * 1,000 category guesses. Two photos of the same car land close together here
+ * even though the model cannot name either of them, which is what lets the app
+ * learn a car from you confirming it once.
+ *
+ * Returns null rather than throwing: recognition still works without it, so a
+ * model build that can't produce embeddings should cost the memory, not the scan.
+ */
+export async function embedImage(el) {
+  try {
+    const model = await ensureModel();
+    if (typeof model.infer !== 'function') return null;
+    const tensor = model.infer(el, true);
+    const values = await tensor.data();
+    tensor.dispose();
+    return values;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------- mapping
 //
 // ImageNet's vehicle-shaped classes, mapped to this app's body styles. Listed
@@ -79,6 +101,9 @@ const BODY_KEYWORDS = [
   ['garbage truck', 'van'],
   ['fire engine', 'van'],
   ['school bus', 'van'],
+  ['minibus', 'van'],
+  ['trolleybus', 'van'],
+  ['ambulance', 'van'],
   ['recreational vehicle', 'van'],
   ['tow truck', 'pickup'],
   ['pickup', 'pickup'],
@@ -92,6 +117,7 @@ const BODY_KEYWORDS = [
   ['model t', 'sedan'],
   ['sports car', 'coupe'],
   ['racer, race car', 'coupe'],
+  ['go-kart', 'coupe'],
 ];
 
 /** Any ImageNet class that means "this photo has a road vehicle in it". */
@@ -101,14 +127,25 @@ const VEHICLE_HINTS = [
   'beach wagon', 'station wagon', 'cab, hack, taxi', 'trailer truck',
   'tow truck', 'garbage truck', 'fire engine', 'moving van', 'police van',
   'recreational vehicle', 'amphibian', 'snowplow', 'streetcar', 'school bus',
-  'half track', 'go-kart', 'golfcart',
+  'half track', 'go-kart', 'golfcart', 'ambulance', 'minibus', 'trolleybus',
+  'seat belt', 'bumper', 'hubcap', 'sunroof',
 ];
 
-/** Whether the photo plausibly contains a car at all, not e.g. a dog. */
-export function looksLikeVehicle(predictions, threshold = 0.15) {
-  return predictions.some(
-    (p) => p.probability >= threshold && VEHICLE_HINTS.some((hint) => p.className.toLowerCase().includes(hint)),
-  );
+/**
+ * Whether the photo has a car in it at all, not e.g. a dog.
+ *
+ * Every vehicle class contributes, so a car seen as a bit of grille, a bit of
+ * wheel and a bit of bumper still counts. That spread is what a real photo of a
+ * car in traffic actually looks like, and demanding a single confident class
+ * turned too many of them away.
+ */
+export function looksLikeVehicle(predictions, threshold = 0.12) {
+  let mass = 0;
+  for (const p of predictions) {
+    const name = p.className.toLowerCase();
+    if (VEHICLE_HINTS.some((hint) => name.includes(hint))) mass += p.probability;
+  }
+  return mass >= threshold;
 }
 
 /**

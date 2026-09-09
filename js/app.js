@@ -1,6 +1,7 @@
 import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
-import { classifyImage, looksLikeVehicle, inferBody, topLabel, ClassifyError, warmUp } from './classify.js';
+import { classifyImage, embedImage, looksLikeVehicle, inferBody, topLabel, ClassifyError, warmUp } from './classify.js';
 import { candidatesForBody } from './match.js';
+import { remember, recall, memoryStats, forgetAll } from './memory.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
   getState, entryFor, isDiscovered, discoveredCount, completion, catchHistory,
@@ -77,9 +78,17 @@ function renderScan() {
   $('#btn-retake').hidden = !shot;
 
   $('#btn-identify').disabled = !shot;
-  $('#scan-note').textContent = shot
-    ? 'One photo is all it takes.'
-    : 'Stand back and fit the whole car in frame.';
+
+  // The app only learns when you tell it what it is looking at, so say so up
+  // front rather than leaving the confirm step feeling like a failure to guess.
+  const { cars: learnedCars } = memoryStats();
+  if (shot) {
+    $('#scan-note').textContent = 'One photo is all it takes.';
+  } else if (learnedCars) {
+    $('#scan-note').textContent = `Stand back and fit the whole car in frame. ${learnedCars} ${learnedCars === 1 ? 'car' : 'cars'} learned so far.`;
+  } else {
+    $('#scan-note').textContent = 'Stand back and fit the whole car in frame. Tell it what each car is and it learns to recognise that one itself.';
+  }
 }
 
 async function onStartCamera() {
@@ -124,10 +133,15 @@ async function onFile(file) {
 function analysingMarkup() {
   return `
     <div class="analysing">
-      <div class="radar"><span></span><span></span><span></span></div>
-      <h2>Looking at the photo</h2>
-      <p class="muted">Recognising the car on this device — nothing leaves your phone.</p>
-      <div class="analysing-shot"><img src="${esc(capture.thumb)}" alt=""></div>
+      <div class="scan-frame">
+        <img src="${esc(capture.preview)}" alt="">
+        <div class="scan-grid"></div>
+        <div class="scan-sweep"></div>
+        <span class="scan-corner tl"></span><span class="scan-corner tr"></span>
+        <span class="scan-corner bl"></span><span class="scan-corner br"></span>
+      </div>
+      <h2>Scanning</h2>
+      <p class="muted">Reading the shape on this device — nothing leaves your phone.</p>
     </div>`;
 }
 
@@ -147,9 +161,11 @@ async function onIdentify() {
   openOverlay('result', analysingMarkup());
 
   let predictions;
+  let embedding = null;
   try {
     const img = await loadCaptureImage();
     predictions = await classifyImage(img);
+    embedding = await embedImage(img);
   } catch (err) {
     openOverlay('result', `
       <button class="sheet-close" data-close aria-label="Close">✕</button>
@@ -162,13 +178,14 @@ async function onIdentify() {
   }
 
   const { body, confidence } = inferBody(predictions);
-  lastResult = { predictions, body, confidence, label: topLabel(predictions) };
+  const learned = embedding ? recall(embedding) : null;
+  lastResult = { predictions, body, confidence, label: topLabel(predictions), embedding, learned };
   renderVerdict();
 }
 
 const BODY_LABEL = {
-  sedan: 'sedan', coupe: 'coupe', convertible: 'convertible', hatchback: 'hatchback',
-  wagon: 'wagon', suv: 'SUV', pickup: 'pickup truck', van: 'van', minivan: 'minivan',
+  sedan: 'a sedan', coupe: 'a coupe', convertible: 'a convertible', hatchback: 'a hatchback',
+  wagon: 'a wagon', suv: 'an SUV', pickup: 'a pickup truck', van: 'a van', minivan: 'a minivan',
 };
 
 /** Cars whose name or country contains the query. */
@@ -181,7 +198,7 @@ function searchCars(query, limit) {
 }
 
 function renderVerdict(query = '') {
-  const { body, label, confidence } = lastResult;
+  const { body, label, confidence, learned } = lastResult;
 
   if (!looksLikeVehicle(lastResult.predictions)) {
     openOverlay('result', `
@@ -201,20 +218,34 @@ function renderVerdict(query = '') {
   // A shaky body-style guess gets a longer shortlist, since it is likelier the
   // right car sits just outside the top few.
   const shortlistSize = confidence >= 0.6 ? 8 : 12;
-  const candidates = searching
-    ? searchCars(query, 20)
-    : candidatesForBody(body, shortlistSize, catchHistory());
+  const learnedCar = learned ? CARS_BY_ID.get(learned.carId) : null;
+
+  let candidates;
+  if (searching) {
+    candidates = searchCars(query, 20);
+  } else {
+    candidates = candidatesForBody(body, shortlistSize, catchHistory());
+    // A car you have taught it outranks any guess made from the shape alone.
+    if (learnedCar) {
+      candidates = [learnedCar, ...candidates.filter((c) => c.id !== learnedCar.id)].slice(0, shortlistSize);
+    }
+  }
+
   const hedge = body && confidence < 0.6 ? ' Not certain, so the list is wider.' : '';
   const guess = body
-    ? `Looks like a ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.${hedge}`
+    ? `Looks like ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.${hedge}`
     : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
+
+  const intro = learnedCar
+    ? `You taught me this one — it looks like the ${esc(displayName(learnedCar))}. Tap it if that's right, or pick another.`
+    : `${esc(guess)} Pick the right one and I'll remember it, so next time I recognise it myself. Or search all ${CARS.length}.`;
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="verdict">
-      <p class="verdict-kicker">${esc(label || 'Car detected')}</p>
-      <h2>Which one is it?</h2>
-      <p class="muted">${esc(guess)} Recognition runs on this device, so it can't read the exact make and model — pick the right one, or search all ${CARS.length}.</p>
+      <p class="verdict-kicker">${learnedCar ? 'Recognised from memory' : esc(label || 'Car detected')}</p>
+      <h2>${learnedCar ? 'Is this it?' : 'Which one is it?'}</h2>
+      <p class="muted">${intro}</p>
       <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
              value="${esc(query)}" autocomplete="off">
       <div class="candidates">
@@ -263,6 +294,10 @@ function logCar(carId) {
     color: capture?.color || null,
   });
 
+  // Confirming the car is the training step: file this photo's fingerprint
+  // under it so the next one like it is recognised without asking.
+  const taught = lastResult?.embedding ? remember(carId, lastResult.embedding) : false;
+
   renderHeader();
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
@@ -276,6 +311,7 @@ function logCar(carId) {
         ${result.breakdown.map((b) => `<li><span>${esc(b.label)}</span><em>+${b.value}</em></li>`).join('')}
       </ul>
       ${result.levelUp ? `<p class="levelup">Level ${result.levelUp} reached</p>` : ''}
+      ${taught ? '<p class="taught">Learned — I\'ll recognise this one next time</p>' : ''}
       ${result.unlocked.length
         ? `<div class="unlocks">${result.unlocked.map((a) => `<span class="unlock">★ ${esc(a.name)}</span>`).join('')}</div>`
         : ''}
@@ -342,6 +378,7 @@ function renderGarage() {
     ['Total scans', state.scans],
     ['Best find', bestRarity ? RARITY[bestRarity].label : '—'],
     ['Completion', `${Math.round(completion() * 100)}%`],
+    ['Cars learned', memoryStats().cars],
   ].map(([label, value]) => `<div class="stat"><span class="muted small">${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
 
   $('#achievements').innerHTML = ACHIEVEMENTS
@@ -400,6 +437,7 @@ function wire() {
   $('#btn-reset').addEventListener('click', () => {
     if (!confirm('Erase your whole Cardex — every car, photo and level? This cannot be undone.')) return;
     resetProgress();
+    forgetAll();
     renderHeader();
     renderGarage();
     renderIndex();
