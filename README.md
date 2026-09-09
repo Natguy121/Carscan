@@ -1,7 +1,8 @@
 # CARSCAN
 
-Point your camera at a car, take one photo, and the game tells you what it is —
-then files it in your index with the full specification. A Pokédex for traffic.
+Point your camera at a car, take one photo, and pick it out of a shortlist —
+then it's filed in your index with the full specification. A Pokédex for
+traffic.
 
 188 real cars, from the Toyota Corolla to the Bugatti Chiron, each with engine,
 power, torque, 0–60, top speed, drivetrain, weight and origin. Cars you have not
@@ -12,26 +13,24 @@ saloons, crossovers, pickups and vans of North America and Europe, from the
 Kia Sorento and Tesla Model Y to the Dacia Sandero and Vauxhall Corsa — plus the
 exotics worth the walk across the car park.
 
-Anything else you point it at still counts. A car Google can name but the index
-has no data for enters as a **Wild** catch — the name, your photo, the colour
-and the date, without the numbers — so no scan of a real car is ever turned
-away.
+Anything else you point it at still counts. A car that isn't in the index can
+be typed in by hand and enters as a **Wild** catch — the name, your photo, the
+colour and the date, without the numbers — so no scan of a real car is ever
+turned away.
 
 ## How it plays
 
 1. **Take one photo.** Stand back, fit the whole car in frame, tap the shutter.
-   One shot, one tap — you are not circling a stranger's car with your phone out.
-2. **Identify.** The photo is reverse-image searched through Google Cloud Vision
-   Web Detection, and its best-guess label and web entities are ranked against
-   the car database.
-3. **Confirm.** If one car clearly wins, you get the reveal. If Vision cannot
-   separate two trims of the same model — a 911 Carrera from a 911 Turbo S, say —
-   the game hands you the shortlist and you settle it.
-4. **Collect.** The car joins your Cardex with its full spec sheet, your photo of
-   it, the colour you caught it in, and the date. Rarer cars are worth more XP.
-   If it is not one of the 188, it enters as a Wild catch instead, with its
-   silhouette taken from the body style Google described. Only a photo with no
-   car in it is refused.
+2. **Identify.** A small recognition model runs right there in your browser —
+   no internet round trip — and guesses the car's body style (SUV, pickup,
+   sedan…) and reads its colour off the photo.
+3. **Confirm.** You get a shortlist of cars matching that body style, commonest
+   first, and tap the right one. On-device recognition can spot a shape; it
+   can't read a badge, so you always make the final call.
+4. **Collect.** The car joins your Cardex with its full spec sheet, your photo
+   of it, the colour you caught it in, and the date. Rarer cars are worth more
+   XP. Not in the list? Type its name and it's logged as a Wild catch instead.
+   Only a photo with no car in it at all is turned away.
 
 Rarity runs Common → Uncommon → Rare → Epic → Legendary, and reflects how often
 you would actually see the car on the road, not how good it is. There are eleven
@@ -39,21 +38,10 @@ achievements and a level track.
 
 ## Setup
 
-Identification uses **Google Cloud Vision Web Detection**, the reverse-image
-lookup behind Lens-style "best guess" results. You need your own key:
-
-1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable the **Cloud Vision API** for it.
-3. Create an API key under *APIs & Services → Credentials*.
-4. Open CARSCAN, go to the **Garage** tab, paste the key, and save.
-
-The free tier covers 1,000 Web Detection units per month, and a scan is one
-photo and therefore one unit — about 1,000 free scans a month.
-
-> **Restrict your key.** The key is stored in your browser's local storage and
-> is sent directly from the page to Google, so anyone who can open your deployed
-> page can read it. In the Cloud Console, restrict the key to the Cloud Vision
-> API and to your own site's HTTP referrer. Do not commit a key to this repo.
+None. Open the page and start scanning — no account, no API key, no billing,
+nothing to sign up for. Recognition is a small on-device model (MobileNet, via
+TensorFlow.js) that downloads once from a public CDN the first time you use it,
+then runs entirely on your device.
 
 ## Running it
 
@@ -70,8 +58,8 @@ photo through exactly the same pipeline.
 ### Deploying to GitHub Pages
 
 Push, then in the repository settings enable Pages from your branch's root.
-Pages serves over HTTPS, so the camera works. Every player enters their own key
-on their own device; nothing is shared.
+Pages serves over HTTPS, so the camera works, and there is nothing else to
+configure — every visitor's recognition runs on their own device.
 
 ### Deploying to Render
 
@@ -85,41 +73,34 @@ sites are served over HTTPS by default, so the camera works there too.
 npm test
 ```
 
-Covers the identification pipeline against realistic Vision responses: a
-confident hit, wild catches and the body style inferred for them, base models
-beating their hotter variants ("Golf" is not a GTI), names built from a letter
-and a word ("A-Class", "Model Y"), nicknames, the best-guess label outweighing a lower-ranked
-entity, trim ambiguity, cars outside the database resolving to *unknown* rather
-than to a wrong match, model-year disambiguation between generations, hyphen and
-spacing variants of model codes, and database integrity.
+Covers the recognition mapping (ImageNet classes → body style, and telling a
+car photo from a non-car one), the shortlist ranking (body-style match first,
+then commonness), and database integrity.
 
 ## How identification works
 
 | File | Role |
 | --- | --- |
-| `js/vision.js` | Calls Vision Web Detection, then folds the best-guess label and web entities into phrase and token tallies. The best guess carries the most weight; entity weights decay by rank. |
-| `js/match.js` | Scores the text against the database. Rare tokens count for more (inverse document frequency), a phrase carrying both make and model counts for much more, and a phrase equal to a car's whole name is decisive. The make scores lightly and wins over any other role the same word plays, so "Rover" cannot pull a Defender towards the Range Rover. |
+| `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. Maps its ImageNet classes to a body style (`inferBodyFromPredictions`) and decides whether the photo has a car in it at all (`looksLikeVehicle`) — both pure functions, easy to test without a model. |
+| `js/match.js` | Builds the shortlist: cars matching the guessed body style first, then ranked by rarity so the common ones you're actually likely to see come first. |
 | `js/cars.js` | The 188 cars and their specifications. |
-| Wild catches | `inferBody` reads the body style out of Google's own wording ("Sport utility vehicle" → SUV) to pick a silhouette, and `looksLikeCar` checks the frame was a car at all before offering the catch. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
 
-A verdict is only *identified* when one car both clears an absolute score and
-beats the runner-up by a clear margin; otherwise you are asked to choose. That
-is deliberate — a confident wrong answer is worse than an honest shortlist.
+MobileNet knows 1,000 general ImageNet categories — "pickup truck", "sports
+car", "minivan" — never an exact make and model, which no free, on-device model
+can do. That's an honest limit of running locally rather than paying a cloud
+vision API, so the app leans into it: it narrows the shape, you make the call.
 
 ## Adding cars
 
-You do not have to — anything the index does not know is caught as a Wild
-entry. Adding a car is how it gains a *spec sheet*. Append to `CARS` in
-`js/cars.js`; the fields are self-explanatory, `rarity` must be one of the five
-tiers and `body` one of the keys in `BODIES`. If the car is
-commonly known by a nickname the make and model do not contain — *Miata*,
-*Hachi-Roku*, *Godzilla* — add it to `ALIASES` in `js/match.js` so Vision's
-wording still finds it. `npm test` checks new entries are well formed.
+You do not have to — anything the index does not know can be typed in and
+caught as a Wild entry. Adding a car to `CARS` in `js/cars.js` is how it gains a
+*spec sheet* and a place in the index proper. The fields are self-explanatory;
+`rarity` must be one of the five tiers and `body` one of the keys in `BODIES`.
+`npm test` checks new entries are well formed.
 
 ## Privacy
 
-Your photo is sent to Google Vision for identification and is not stored
-anywhere but your own browser. Progress, photos and your API key live in local storage on
-your device only. There is no server and no account.
+Nothing leaves your device. Recognition runs locally, and progress and photos
+live in local storage on your device only. There is no server and no account.

@@ -1,9 +1,6 @@
 import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
-import {
-  detectCar, analyseDetection, inferBody, looksLikeCar, tokenize,
-  getApiKey, setApiKey, hasApiKey, VisionError,
-} from './vision.js';
-import { rankCandidates, resolve } from './match.js';
+import { classifyImage, looksLikeVehicle, inferBodyFromPredictions, topLabel, ClassifyError, warmUp } from './classify.js';
+import { candidatesForBody } from './match.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
   getState, entryFor, isDiscovered, discoveredCount, wildIds, wildCount, completion,
@@ -14,16 +11,18 @@ import { carCard, specSheet, candidateRow, achievementTile, rarityPill, esc } fr
 const $ = (sel) => document.querySelector(sel);
 
 let capture = null;
+let filter = 'all';
+let lastResult = null;
 
 // ------------------------------------------------------- wild (unlisted) cars
 
 /** Stable id for a car the index has no entry for, so repeat sightings stack. */
 function wildId(name) {
-  const slug = tokenize(name).join('-') || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `wild:${slug.replace(/^-+|-+$/g, '')}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `wild:${slug || 'car'}`;
 }
 
-/** Google returns one string; the card wants a make and a model. */
+/** A player-typed name is one free-text string; the card wants a make and a model. */
 function splitName(name) {
   const trimmed = name.trim();
   const i = trimmed.indexOf(' ');
@@ -41,8 +40,6 @@ function wildCars() {
 function nameMarkup(car) {
   return car.wild ? `<strong>${esc(car.name)}</strong>` : `${esc(car.make)} <strong>${esc(car.model)}</strong>`;
 }
-let filter = 'all';
-let lastResult = null;
 
 // ------------------------------------------------------------------ toasts
 
@@ -151,120 +148,82 @@ async function onFile(file) {
 
 // ------------------------------------------------------------ identification
 
-function evidenceChips(reading) {
-  return reading.phrases
-    .slice(0, 5)
-    .map((p) => `<span class="chip">${esc(p.display)}</span>`)
-    .join('');
-}
-
 function analysingMarkup() {
   return `
     <div class="analysing">
       <div class="radar"><span></span><span></span><span></span></div>
-      <h2>Reading the car</h2>
-      <p class="muted">Reverse-image searching your photo through Google Vision…</p>
+      <h2>Looking at the photo</h2>
+      <p class="muted">Recognising the car on this device — nothing leaves your phone.</p>
       <div class="analysing-shot"><img src="${esc(capture.thumb)}" alt=""></div>
     </div>`;
+}
+
+/** Load `capture.preview` into an <img> the model can read pixels from. */
+function loadCaptureImage() {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not read the captured photo.'));
+    img.src = capture.preview;
+  });
 }
 
 async function onIdentify() {
   if (!capture) return;
 
-  if (!hasApiKey()) {
-    openOverlay('result', `
-      <button class="sheet-close" data-close aria-label="Close">✕</button>
-      <div class="verdict verdict-setup">
-        <h2>Add a Google Vision key</h2>
-        <p class="muted">
-          CARSCAN identifies cars with Google Cloud Vision Web Detection — a reverse-image
-          search across the web. Add a key in the Garage tab to start scanning.
-        </p>
-        <button class="btn btn-primary" data-goto="garage">Open settings</button>
-      </div>`);
-    return;
-  }
-
   openOverlay('result', analysingMarkup());
 
-  let detection;
+  let predictions;
   try {
-    detection = await detectCar(capture.base64);
+    const img = await loadCaptureImage();
+    predictions = await classifyImage(img);
   } catch (err) {
     openOverlay('result', `
       <button class="sheet-close" data-close aria-label="Close">✕</button>
       <div class="verdict verdict-error">
         <h2>Scan failed</h2>
-        <p class="muted">${esc(err instanceof VisionError ? err.message : 'Something went wrong talking to Google Vision.')}</p>
+        <p class="muted">${esc(err instanceof ClassifyError ? err.message : 'Something went wrong reading the photo.')}</p>
         <button class="btn btn-primary" data-close>Back</button>
       </div>`);
     return;
   }
 
-  const reading = analyseDetection(detection);
-  const candidates = rankCandidates(reading);
-  lastResult = { ...resolve(reading, candidates), reading, detection };
+  lastResult = { predictions, body: inferBodyFromPredictions(predictions), label: topLabel(predictions) };
   renderVerdict();
 }
 
+const BODY_LABEL = {
+  sedan: 'sedan', coupe: 'coupe', convertible: 'convertible', hatchback: 'hatchback',
+  wagon: 'wagon', suv: 'SUV', pickup: 'pickup truck', van: 'van', minivan: 'minivan',
+};
+
 function renderVerdict() {
-  const { status, car, candidates, reading, detectedName, detection } = lastResult;
+  const { body, label } = lastResult;
 
-  if (status === 'identified') {
-    openOverlay('result', `
-      <button class="sheet-close" data-close aria-label="Close">✕</button>
-      <div class="verdict verdict-hit" data-rarity="${car.rarity}">
-        <p class="verdict-kicker">Identified${isDiscovered(car.id) ? '' : ' — new to your index'}</p>
-        <h2 class="verdict-name">${esc(car.make)} <strong>${esc(car.model)}</strong></h2>
-        ${rarityPill(car.rarity)}
-        <p class="verdict-sub">${esc(car.years)} · ${esc(car.engine)} · ${car.power} hp</p>
-                <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>
-        <button class="btn btn-primary btn-lg" data-log="${esc(car.id)}">
-          ${isDiscovered(car.id) ? 'Log this sighting' : 'Add to Cardex'}
-        </button>
-        <button class="btn btn-ghost" data-show-candidates>Not right? Choose another</button>
-      </div>`);
-    return;
-  }
-
-  if (status === 'ambiguous') {
+  if (!looksLikeVehicle(lastResult.predictions)) {
     openOverlay('result', `
       <button class="sheet-close" data-close aria-label="Close">✕</button>
       <div class="verdict">
-        <p class="verdict-kicker">Narrow it down</p>
-        <h2>Close, but not certain</h2>
-        <p class="muted">Google matched this to more than one car in the index. Pick the right one.</p>
-                <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>
-        <div class="candidates">${candidates.map(candidateRow).join('')}</div>
+        <p class="verdict-kicker">No car found</p>
+        <h2>Could not spot a car in that photo</h2>
+        <p class="muted">Try again with the whole car in frame and well lit.</p>
         <button class="btn btn-ghost" data-manual>Search the index instead</button>
       </div>`);
     return;
   }
 
-  // Google named something, and the frame really is a car: it still counts.
-  if (detectedName && looksLikeCar(detection)) {
-    openOverlay('result', `
-      <button class="sheet-close" data-close aria-label="Close">✕</button>
-      <div class="verdict verdict-hit" data-rarity="wild">
-        <p class="verdict-kicker">Identified — no spec sheet on file</p>
-        <h2 class="verdict-name"><strong>${esc(detectedName)}</strong></h2>
-        ${rarityPill('wild')}
-        <p class="verdict-sub">Not one of the ${CARS.length} cars the Cardex carries data for, but the catch counts.</p>
-        <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>
-        <button class="btn btn-primary btn-lg" data-log-wild>Add to Cardex</button>
-        <button class="btn btn-ghost" data-manual>Not right? Search the index</button>
-      </div>`);
-    return;
-  }
+  const candidates = candidatesForBody(body);
+  const guess = body ? `Looks like a ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.` : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="verdict">
-      <p class="verdict-kicker">No car found</p>
-      <h2>Could not read a car</h2>
-      <p class="muted">Try again with the whole car in frame and well lit.</p>
-      ${reading.phrases.length ? `<div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>` : ''}
-      <button class="btn btn-ghost" data-manual>Search the index instead</button>
+      <p class="verdict-kicker">${esc(label || 'Car detected')}</p>
+      <h2>Which one is it?</h2>
+      <p class="muted">${esc(guess)} Recognition runs on this device, so it can't read the exact make and model — pick the right one.</p>
+      <div class="candidates">${candidates.map((car) => candidateRow({ car })).join('')}</div>
+      <button class="btn btn-ghost" data-manual>Search the whole index</button>
+      <button class="btn btn-ghost" data-name-it>Not listed — type its name</button>
     </div>`);
 }
 
@@ -282,13 +241,29 @@ function renderManualPicker(query = '') {
       <input class="search" id="manual-search" type="search" placeholder="Make or model…" value="${esc(query)}" autocomplete="off">
       <div class="candidates">
         ${list.length
-          ? list.map((car) => candidateRow({ car, confidence: 1 })).join('')
+          ? list.map((car) => candidateRow({ car })).join('')
           : '<p class="muted">Nothing matches that.</p>'}
       </div>
+      <button class="btn btn-ghost" data-name-it>Still not there — type its name</button>
     </div>`);
   const input = $('#manual-search');
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function renderNameIt() {
+  openOverlay('result', `
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div class="verdict">
+      <p class="verdict-kicker">Log it yourself</p>
+      <h2>What is it?</h2>
+      <p class="muted">Type the make and model. It'll be added as a Wild catch, without a spec sheet.</p>
+      <input class="search" id="name-it-input" type="text" placeholder="e.g. Lada Niva" autocomplete="off">
+      <button class="btn btn-primary btn-lg" id="name-it-confirm" disabled>Add to Cardex</button>
+    </div>`);
+  const input = $('#name-it-input');
+  input.focus();
+  $('#name-it-confirm').disabled = true;
 }
 
 // --------------------------------------------------------------- log a car
@@ -403,8 +378,6 @@ function renderGarage() {
         <span class="muted small">${got}/${total}</span>
       </div>`;
   }).join('');
-
-  $('#api-key').value = getApiKey();
 }
 
 // -------------------------------------------------------------- car detail
@@ -445,15 +418,6 @@ function wire() {
     if (card) openCar(card.dataset.car);
   });
 
-  $('#btn-save-key').addEventListener('click', () => {
-    const value = $('#api-key').value.trim();
-    if (!setApiKey(value)) {
-      toast('This browser blocked local storage, so the key cannot be saved.', 'error');
-      return;
-    }
-    toast(value ? 'API key saved to this browser.' : 'API key removed.', 'success');
-  });
-
   $('#btn-reset').addEventListener('click', () => {
     if (!confirm('Erase your whole Cardex — every car, photo and level? This cannot be undone.')) return;
     resetProgress();
@@ -477,32 +441,18 @@ function wire() {
       showView(t.closest('[data-goto]').dataset.goto);
       return;
     }
-    const log = t.closest('[data-log]');
-    if (log) return logCar(log.dataset.log);
-
-    if (t.closest('[data-log-wild]')) {
-      const name = lastResult.detectedName;
-      const wild = { name, body: inferBody(lastResult.detection) };
-      return logCar(wildId(name), wild);
-    }
-
     const pick = t.closest('[data-pick]');
     if (pick) return logCar(pick.dataset.pick);
 
-    if (t.closest('[data-show-candidates]')) {
-      const list = lastResult?.candidates || [];
-      if (!list.length) return renderManualPicker();
-      openOverlay('result', `
-        <button class="sheet-close" data-close aria-label="Close">✕</button>
-        <div class="verdict">
-          <p class="verdict-kicker">Other matches</p>
-          <h2>Pick the right car</h2>
-          <div class="candidates">${list.map(candidateRow).join('')}</div>
-          <button class="btn btn-ghost" data-manual>Search the index instead</button>
-        </div>`);
-      return;
-    }
     if (t.closest('[data-manual]')) return renderManualPicker();
+    if (t.closest('[data-name-it]')) return renderNameIt();
+
+    if (t.id === 'name-it-confirm') {
+      const name = $('#name-it-input').value.trim();
+      if (!name) return;
+      return logCar(wildId(name), { name, body: lastResult?.body || null });
+    }
+
     if (t.closest('[data-rescan]')) {
       closeOverlay('result');
       showView('scan');
@@ -517,6 +467,16 @@ function wire() {
 
   document.addEventListener('input', (e) => {
     if (e.target.id === 'manual-search') renderManualPicker(e.target.value);
+    if (e.target.id === 'name-it-input') {
+      const btn = $('#name-it-confirm');
+      if (btn) btn.disabled = !e.target.value.trim();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'name-it-input' && e.target.value.trim()) {
+      $('#name-it-confirm')?.click();
+    }
   });
 
   // Click the backdrop or press Escape to dismiss.
@@ -539,10 +499,7 @@ function init() {
   renderHeader();
   renderScan();
   renderIndex();
-  if (!hasApiKey()) {
-    $('#stage-empty-sub').textContent =
-      'Add a Google Vision API key in the Garage tab, then point the camera at a car.';
-  }
+  warmUp();
 }
 
 init();

@@ -1,5 +1,5 @@
 // Camera access and frame capture. Every captured angle produces both a
-// full-size JPEG for Google Vision and a small thumbnail for the Cardex.
+// full-size JPEG for the recognition model and a small thumbnail for the Cardex.
 
 const API_MAX_WIDTH = 1024;
 const THUMB_MAX_WIDTH = 320;

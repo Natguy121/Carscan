@@ -69,7 +69,7 @@ export function knownIds() {
   return Object.keys(state.entries).filter((id) => CARS_BY_ID.has(id));
 }
 
-/** Cars Google named that the index has no spec sheet for. */
+/** Cars you typed in by hand that the index has no spec sheet for. */
 export function wildIds() {
   return Object.keys(state.entries).filter((id) => !CARS_BY_ID.has(id));
 }

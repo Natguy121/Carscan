@@ -100,9 +100,8 @@ export function specSheet(car, entry, { showClose = true } = {}) {
     <dl class="specs">${specRows(car)}</dl>`;
 }
 
-/** A candidate the player can tap to confirm when Vision is not certain. */
-export function candidateRow(candidate) {
-  const { car, confidence } = candidate;
+/** A car the player can tap to confirm from a shortlist. */
+export function candidateRow({ car }) {
   return `
     <button class="candidate" data-pick="${esc(car.id)}" data-rarity="${car.rarity}">
       <div class="candidate-art">${silhouette(car.body, { className: 'sil' })}</div>
@@ -112,7 +111,6 @@ export function candidateRow(candidate) {
       </div>
       <div class="candidate-meta">
         ${rarityPill(car.rarity)}
-        <span class="conf" style="--conf:${Math.round(confidence * 100)}%">${Math.round(confidence * 100)}%</span>
       </div>
     </button>`;
 }
@@ -127,7 +125,7 @@ export function achievementTile(achievement, unlocked) {
 }
 
 /**
- * A car Google named that the index has no spec sheet for. It still earns a
+ * A car you typed in by hand that the index has no spec sheet for. It still earns a
  * real entry — your photo, the colour, the date — just without the numbers.
  */
 function wildSheet(car, entry, showClose) {
@@ -139,7 +137,7 @@ function wildSheet(car, entry, showClose) {
       <div>
         ${rarityPill('wild')}
         <h2 class="sheet-title"><strong>${esc(car.name)}</strong></h2>
-        <p class="sheet-sub">${esc(BODIES[car.body])} · identified by Google</p>
+        <p class="sheet-sub">${esc(BODIES[car.body])} · logged by you</p>
       </div>
     </div>
     ${photo ? `<div class="gallery"><img src="${esc(photo)}" alt="Your photo of the ${esc(car.name)}" loading="lazy"></div>` : ''}
@@ -149,7 +147,7 @@ function wildSheet(car, entry, showClose) {
       <div><span class="muted small">Colours seen</span><strong>${entry?.colors?.length ? esc(entry.colors.join(', ')) : '—'}</strong></div>
     </div>
     <p class="undiscovered-note">
-      Specifications are not on file — this one is not among the cars the Cardex
-      carries full data for. The catch still counts.
+      Specifications are not on file for this one — it isn't among the 188 cars
+      the Cardex carries full data for. The catch still counts.
     </p>`;
 }

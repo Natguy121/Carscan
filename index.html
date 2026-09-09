@@ -32,7 +32,7 @@
         <div class="stage-empty" id="stage-empty">
           <div class="stage-empty-inner">
             <p class="stage-empty-title">Camera off</p>
-            <p class="stage-empty-sub" id="stage-empty-sub">Start the camera to scan a car, or upload photos.</p>
+            <p class="stage-empty-sub" id="stage-empty-sub">Start the camera to scan a car, or upload a photo. Recognition runs on this device — no account needed.</p>
             <button class="btn btn-primary" id="btn-start-cam">Start camera</button>
           </div>
         </div>
@@ -82,20 +82,15 @@
       <h3 class="section-title">Rarity breakdown</h3>
       <div class="rarity-bars" id="rarity-bars"></div>
 
-      <h3 class="section-title">Settings</h3>
+      <h3 class="section-title">How it works</h3>
       <div class="settings">
-        <label class="field">
-          <span class="field-label">Google Cloud Vision API key</span>
-          <input type="password" id="api-key" placeholder="AIza…" autocomplete="off" spellcheck="false">
-        </label>
         <p class="muted small">
-          Identification uses Google Cloud Vision <strong>Web Detection</strong> — the reverse-image
-          lookup behind Lens-style results. The key is stored only in this browser and is sent
-          straight to Google. Restrict it to the Vision API and to your own site.
-          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Get a key</a>
+          Recognition runs right in this browser using a small on-device model — no account, no
+          API key, and no data ever leaves your device. It can spot a car's <strong>body style</strong>
+          (SUV, sedan, pickup…) and colour, but not an exact make and model, so you confirm the
+          exact car from a shortlist after every scan.
         </p>
         <div class="settings-actions">
-          <button class="btn btn-primary" id="btn-save-key">Save key</button>
           <button class="btn btn-danger" id="btn-reset">Reset all progress</button>
         </div>
       </div>
