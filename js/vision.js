@@ -39,31 +39,45 @@ const NOISE = new Set([
   'crossover', 'pickup', 'truck', 'van', 'minivan', 'roadster', 'cabriolet',
   'photo', 'photograph', 'image', 'stock', 'wallpaper', 'hd', 'png', 'jpg',
   'design', 'rental', 'dealership', 'dealer', 'sale', 'price', 'used',
-  'new', 'review', 'test', 'drive', 'the', 'and', 'for', 'with', 'of', 'a', 'in',
-  'edition', 'trim', 'series', 'generation', 'gen', 'model', 'facelift',
+  'new', 'review', 'test', 'drive', 'the', 'and', 'for', 'with', 'of', 'in',
+  // 'a' is deliberately absent: single letters never survive as tokens anyway,
+  // and dropping it here would break the pair in "A-Class".
+  'edition', 'trim', 'generation', 'gen', 'facelift',
+  // 'model' and 'series' are absent on purpose: they name real cars
+  // ("Model Y", "3 Series") and removing them erases the car.
   'black', 'white', 'silver', 'grey', 'gray', 'red', 'blue', 'green', 'yellow',
   'orange', 'brown', 'beige', 'gold', 'purple',
 ]);
 
 /** Normalise a label into comparable tokens, dropping years and filler words. */
-export function tokenize(text) {
+function rawTokens(text) {
   return String(text || '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .split(' ')
     .filter((t) => t && !NOISE.has(t))
-    .filter((t) => !/^(19|20)\d{2}$/.test(t))
-    // A lone letter ("R" from GT-R, "S" from Turbo S) carries no signal on its
-    // own; the bigram pass below recovers it as part of "gtr"/"turbos".
-    .filter((t) => !/^[a-z]$/.test(t));
+    .filter((t) => !/^(19|20)\d{2}$/.test(t));
 }
 
-/** Tokens plus concatenated adjacent pairs, so "gt r" also yields "gtr". */
+/**
+ * Comparable words. A lone letter ("R" from GT-R, "S" from S-Class) carries no
+ * signal by itself, so it is dropped here; `tokenKeys` recovers it in a pair.
+ */
+export function tokenize(text) {
+  return rawTokens(text).filter((t) => !/^[a-z]$/.test(t));
+}
+
+/**
+ * Tokens plus concatenated adjacent pairs, so "gt r" also yields "gtr".
+ *
+ * Pairs are built before single letters are dropped: "S-Class" and "E 350" are
+ * meaningless as a bare "s" or "e", but "sclass" and "e350" identify one car.
+ */
 export function tokenKeys(text) {
-  const toks = tokenize(text);
-  const keys = [...toks];
-  for (let i = 0; i < toks.length - 1; i++) keys.push(toks[i] + toks[i + 1]);
-  return keys;
+  const raw = rawTokens(text);
+  const keys = raw.filter((t) => !/^[a-z]$/.test(t));
+  for (let i = 0; i < raw.length - 1; i++) keys.push(raw[i] + raw[i + 1]);
+  return [...new Set(keys)];
 }
 
 /** Model year mentioned anywhere in the returned labels, if any. */

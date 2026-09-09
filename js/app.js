@@ -331,6 +331,9 @@ function logCar(carId, wild = null) {
 
 // -------------------------------------------------------------- index view
 
+const RARITY_ORDER = [...Object.keys(RARITY), 'wild'];
+const rarityRank = (car) => RARITY_ORDER.indexOf(car.rarity);
+
 function renderIndex() {
   const found = discoveredCount();
   const wild = wildCount();
@@ -351,12 +354,16 @@ function renderIndex() {
     .join('');
 
   // Wild catches have no slot in the index, so they follow the known cars.
-  const visible = [...CARS, ...wildCars()].filter((car) => {
-    if (filter === 'all') return true;
-    if (filter === 'found') return isDiscovered(car.id);
-    if (filter === 'missing') return !car.wild && !isDiscovered(car.id);
-    return car.rarity === filter;
-  });
+  const visible = [...CARS, ...wildCars()]
+    .filter((car) => {
+      if (filter === 'all') return true;
+      if (filter === 'found') return isDiscovered(car.id);
+      if (filter === 'missing') return !car.wild && !isDiscovered(car.id);
+      return car.rarity === filter;
+    })
+    // Ordered by rarity so the grid reads commonest-first whatever order the
+    // database happens to list cars in.
+    .sort((a, b) => rarityRank(a) - rarityRank(b) || a.make.localeCompare(b.make));
 
   $('#grid').innerHTML = visible.length
     ? visible.map((car) => carCard(car, entryFor(car.id))).join('')

@@ -47,8 +47,39 @@ test('same model different trims comes back ambiguous for the player to settle',
 });
 
 test('a car outside the database resolves to unknown, not a wrong match', () => {
-  const r = identify(seen('kia sorento', ['Kia Sorento', 'Kia', 'Kia Motors']));
+  const r = identify(seen('lada niva', ['Lada Niva', 'Lada', 'AvtoVAZ']));
   assert.equal(r.status, 'unknown');
+});
+
+test('the base model wins over its hotter variant when Google names neither', () => {
+  // "Golf" alone should not land on the GTI, nor "Civic" on the Type R.
+  for (const [guess, entities, expected] of [
+    ['volkswagen golf', ['Volkswagen Golf', 'Volkswagen'], 'vw-golf'],
+    ['honda civic', ['Honda Civic', 'Honda'], 'honda-civic'],
+    ['toyota corolla', ['Toyota Corolla', 'Toyota'], 'toyota-corolla'],
+  ]) {
+    assert.equal(identify(seen(guess, entities)).car?.id, expected, `failed for ${guess}`);
+  }
+});
+
+test('names built from a letter and a word survive tokenising', () => {
+  // "A-Class" and "Model Y" vanish if the lone letter is dropped before pairing.
+  for (const [guess, entities, expected] of [
+    ['mercedes a class', ['Mercedes-Benz A-Class', 'Mercedes-Benz'], 'mercedes-aclass'],
+    ['mercedes s class', ['Mercedes-Benz S-Class', 'Mercedes-Benz'], 'mercedes-sclass'],
+    ['tesla model y', ['Tesla Model Y', 'Tesla'], 'tesla-model-y'],
+    ['tesla model x', ['Tesla Model X', 'Tesla'], 'tesla-model-x'],
+  ]) {
+    assert.equal(identify(seen(guess, entities)).car?.id, expected, `failed for ${guess}`);
+  }
+});
+
+test('a make word does not outrank the model that names a different car', () => {
+  // "Rover" sits in the Range Rover's model name but is only the make here.
+  assert.equal(
+    identify(seen('land rover defender', ['Land Rover Defender', 'Land Rover'])).car?.id,
+    'landrover-defender',
+  );
 });
 
 test('model year narrows between generations of one nameplate', () => {
@@ -71,6 +102,11 @@ test('common commuter cars resolve as readily as exotics', () => {
     ['honda civic sedan', ['Honda Civic', 'Honda'], 'honda-civic'],
     ['jeep wrangler rubicon', ['Jeep Wrangler', 'Jeep'], 'jeep-wrangler'],
     ['tesla model 3', ['Tesla Model 3', 'Tesla'], 'tesla-model-3'],
+    ['kia sorento', ['Kia Sorento', 'Kia'], 'kia-sorento'],
+    ['subaru forester', ['Subaru Forester', 'Subaru'], 'subaru-forester'],
+    ['vauxhall corsa', ['Vauxhall Corsa', 'Opel Corsa'], 'opel-corsa'],
+    ['skoda octavia', ['Škoda Octavia', 'Škoda'], 'skoda-octavia'],
+    ['bmw x5', ['BMW X5', 'BMW'], 'bmw-x5'],
   ];
   for (const [guess, entities, expected] of cases) {
     const r = identify(seen(guess, entities));
@@ -96,5 +132,5 @@ test('database entries are well formed and uniquely identified', () => {
       assert.equal(typeof car[field], 'number', `${car.id} bad ${field}`);
     }
   }
-  assert.ok(CARS.length >= 60);
+  assert.ok(CARS.length >= 180);
 });

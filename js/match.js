@@ -44,9 +44,9 @@ const ALIASES = {
   'ford-gt-2017': ['fordgt'],
   'dodge-viper-acr': ['viper', 'acr'],
   'jaguar-ftype-r': ['ftype', 'jag'],
-  'range-rover': ['rangerover', 'landrover', 'rangie'],
+  'range-rover': ['rangerover', 'rangie'],
   'mini-cooper-s': ['mini', 'cooper'],
-  'vw-golf-gti': ['gti', 'golf', 'mk8'],
+  'vw-golf-gti': ['gti', 'mk8'],
   'subaru-wrx': ['wrx', 'sti', 'rex'],
   'toyota-gr86': ['gr86', 'brz', '86', 'frs'],
   'chevy-silverado': ['silverado'],
@@ -58,6 +58,8 @@ const ALIASES = {
 };
 
 const keySet = (text) => new Set(tokenKeys(text));
+
+const MAKE_WEIGHT = 0.7;
 
 function parseYears(years) {
   const nums = String(years).match(/\d{4}/g);
@@ -78,10 +80,32 @@ const PROFILES = CARS.map((car) => {
     codeKeys,
     aliasKeys,
     all: new Set([...makeKeys, ...modelKeys, ...codeKeys, ...aliasKeys]),
+    keyWeights: bestWeights(makeKeys, [
+      [modelKeys, 2.2],
+      [codeKeys, 2.0],
+      [aliasKeys, 2.0],
+    ]),
     canonical: tokenize(`${car.make} ${car.model.replace(/\(.*?\)/g, ' ')}`).join(' '),
     years: parseYears(car.years),
   };
 });
+
+/**
+ * One weight per key, so nothing is counted twice.
+ *
+ * The make scores lightly — every Land Rover shares it, so it places the car in
+ * a family rather than picking one out — and it wins over any other role the
+ * same word plays. Otherwise "Rover" would count as a model word for the Range
+ * Rover and beat a Defender on the Defender's own name.
+ */
+function bestWeights(makeKeys, groups) {
+  const weights = new Map();
+  for (const [keys, weight] of groups) {
+    for (const k of keys) weights.set(k, Math.max(weights.get(k) || 0, weight));
+  }
+  for (const k of makeKeys) weights.set(k, MAKE_WEIGHT);
+  return weights;
+}
 
 const DF = new Map();
 PROFILES.forEach((p) => p.all.forEach((k) => DF.set(k, (DF.get(k) || 0) + 1)));
@@ -113,31 +137,10 @@ export function rankCandidates(fused) {
     const hits = [];
 
     const makeHit = [...p.makeKeys].some((k) => weightOf(fused, k) > 0);
-    for (const k of p.makeKeys) {
+    for (const [k, multiplier] of p.keyWeights) {
       const w = weightOf(fused, k);
       if (w > 0) {
-        score += w * idf(k) * 1.4;
-        hits.push(k);
-      }
-    }
-    for (const k of p.modelKeys) {
-      const w = weightOf(fused, k);
-      if (w > 0) {
-        score += w * idf(k) * 2.2;
-        hits.push(k);
-      }
-    }
-    for (const k of p.codeKeys) {
-      const w = weightOf(fused, k);
-      if (w > 0) {
-        score += w * idf(k) * 2.0;
-        hits.push(k);
-      }
-    }
-    for (const k of p.aliasKeys) {
-      const w = weightOf(fused, k);
-      if (w > 0) {
-        score += w * idf(k) * 2.0;
+        score += w * idf(k) * multiplier;
         hits.push(k);
       }
     }
@@ -190,10 +193,12 @@ export function resolve(fused, candidates) {
   const margin = second ? best.score / second.score : Infinity;
   const strong = best.score >= 6;
 
-  // A confident win needs both an absolute score and a clear gap to second place.
-  // Trims of one nameplate score near-identically and fall through to the
-  // player instead — Vision usually cannot tell a Carrera from a Turbo S.
-  if (strong && margin >= 1.35) {
+  // A confident win needs both an absolute score and a gap to second place.
+  // Two trims of one nameplate share every word Vision returned and so tie
+  // exactly at 1.0; any margin above that means one of them held a word the
+  // other did not. The threshold sits in the empty ground between the two —
+  // well clear of a tie, well below a genuine win — rather than hugging either.
+  if (strong && margin >= 1.15) {
     return { status: 'identified', label, car: best.car, candidates, detectedName: displayName(best.car) };
   }
   if (best.score >= 2.5) {

@@ -3,9 +3,14 @@
 Point your camera at a car, take one photo, and the game tells you what it is —
 then files it in your index with the full specification. A Pokédex for traffic.
 
-Eighty real cars, from the Toyota Corolla to the Bugatti Chiron, each with
-engine, power, torque, 0–60, top speed, drivetrain, weight and origin. Cars you
-have not found yet show only a silhouette of their body style.
+188 real cars, from the Toyota Corolla to the Bugatti Chiron, each with engine,
+power, torque, 0–60, top speed, drivetrain, weight and origin. Cars you have not
+found yet show only a silhouette of their body style.
+
+The set is weighted towards what is actually parked outside: the best-selling
+saloons, crossovers, pickups and vans of North America and Europe, from the
+Kia Sorento and Tesla Model Y to the Dacia Sandero and Vauxhall Corsa — plus the
+exotics worth the walk across the car park.
 
 Anything else you point it at still counts. A car Google can name but the index
 has no data for enters as a **Wild** catch — the name, your photo, the colour
@@ -24,7 +29,7 @@ away.
    the game hands you the shortlist and you settle it.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo of
    it, the colour you caught it in, and the date. Rarer cars are worth more XP.
-   If it is not one of the eighty, it enters as a Wild catch instead, with its
+   If it is not one of the 188, it enters as a Wild catch instead, with its
    silhouette taken from the body style Google described. Only a photo with no
    car in it is refused.
 
@@ -81,7 +86,9 @@ npm test
 ```
 
 Covers the identification pipeline against realistic Vision responses: a
-confident hit, wild catches and the body style inferred for them, nicknames, the best-guess label outweighing a lower-ranked
+confident hit, wild catches and the body style inferred for them, base models
+beating their hotter variants ("Golf" is not a GTI), names built from a letter
+and a word ("A-Class", "Model Y"), nicknames, the best-guess label outweighing a lower-ranked
 entity, trim ambiguity, cars outside the database resolving to *unknown* rather
 than to a wrong match, model-year disambiguation between generations, hyphen and
 spacing variants of model codes, and database integrity.
@@ -91,8 +98,8 @@ spacing variants of model codes, and database integrity.
 | File | Role |
 | --- | --- |
 | `js/vision.js` | Calls Vision Web Detection, then folds the best-guess label and web entities into phrase and token tallies. The best guess carries the most weight; entity weights decay by rank. |
-| `js/match.js` | Scores the fused text against the database. Rare tokens count for more (inverse document frequency), a phrase carrying both make and model counts for much more, and a phrase equal to a car's whole name is decisive. |
-| `js/cars.js` | The 80 cars and their specifications. |
+| `js/match.js` | Scores the text against the database. Rare tokens count for more (inverse document frequency), a phrase carrying both make and model counts for much more, and a phrase equal to a car's whole name is decisive. The make scores lightly and wins over any other role the same word plays, so "Rover" cannot pull a Defender towards the Range Rover. |
+| `js/cars.js` | The 188 cars and their specifications. |
 | Wild catches | `inferBody` reads the body style out of Google's own wording ("Sport utility vehicle" → SUV) to pick a silhouette, and `looksLikeCar` checks the frame was a car at all before offering the catch. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
