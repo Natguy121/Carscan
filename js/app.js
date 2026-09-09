@@ -1,5 +1,5 @@
 import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
-import { detectAngle, fuseDetections, getApiKey, setApiKey, hasApiKey, VisionError } from './vision.js';
+import { detectCar, analyseDetection, getApiKey, setApiKey, hasApiKey, VisionError } from './vision.js';
 import { rankCandidates, resolve } from './match.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
@@ -10,14 +10,7 @@ import { carCard, specSheet, candidateRow, achievementTile, rarityPill, esc } fr
 
 const $ = (sel) => document.querySelector(sel);
 
-const ANGLES = [
-  { id: 'front', label: 'Front', hint: 'Capture the <strong>front</strong> of the car' },
-  { id: 'side', label: 'Side', hint: 'Now the <strong>side</strong> profile' },
-  { id: 'rear', label: 'Rear', hint: 'Now the <strong>rear</strong>' },
-  { id: 'detail', label: 'Badge', hint: 'Optional — a <strong>badge or wheel</strong> close-up' },
-];
-
-let captures = [];
+let capture = null;
 let filter = 'all';
 let lastResult = null;
 
@@ -74,34 +67,19 @@ function renderHeader() {
 
 // --------------------------------------------------------------- scan view
 
-function renderAngles() {
-  $('#angles').innerHTML = ANGLES.map((a, i) => {
-    const shot = captures[i];
-    return `
-      <button class="angle${shot ? ' is-filled' : ''}${i === captures.length ? ' is-next' : ''}"
-              data-angle="${i}" ${shot ? '' : 'disabled'}
-              aria-label="${shot ? `Remove ${a.label} photo` : `${a.label} not captured`}">
-        ${shot ? `<img src="${esc(shot.thumb)}" alt="">` : ''}
-        <span class="angle-label">${a.label}</span>
-        ${shot ? '<span class="angle-remove">✕</span>' : ''}
-      </button>`;
-  }).join('');
+function renderScan() {
+  const shot = Boolean(capture);
+  $('#shot-preview').innerHTML = shot ? `<img src="${esc(capture.preview)}" alt="The car you photographed">` : '';
+  $('#shot-preview').hidden = !shot;
 
-  const next = ANGLES[captures.length];
-  $('#stage-hint').innerHTML = next ? next.hint : 'All four angles captured — identify it';
+  $('#btn-capture').hidden = shot;
+  $('#btn-upload-trigger').hidden = shot;
+  $('#btn-retake').hidden = !shot;
 
-  $('#btn-identify').disabled = captures.length === 0;
-  $('#btn-identify').textContent = captures.length
-    ? `Identify car — ${captures.length} angle${captures.length > 1 ? 's' : ''}`
-    : 'Identify car';
-  $('#btn-clear').disabled = captures.length === 0;
-
-  const note = captures.length === 0
-    ? 'More angles means a more confident match.'
-    : captures.length < 3
-      ? 'Add another angle to raise confidence — and earn bonus XP.'
-      : 'Strong scan. Angles that agree reinforce each other.';
-  $('#scan-note').textContent = note;
+  $('#btn-identify').disabled = !shot;
+  $('#scan-note').textContent = shot
+    ? 'One photo is all it takes.'
+    : 'Stand back and fit the whole car in frame.';
 }
 
 async function onStartCamera() {
@@ -109,7 +87,7 @@ async function onStartCamera() {
     $('#stage-empty').hidden = true;
     await startCamera($('#cam'));
     $('#cam').classList.add('is-live');
-    renderAngles();
+    renderScan();
   } catch (err) {
     $('#stage-empty').hidden = false;
     $('#stage-empty-sub').textContent = err instanceof CameraError
@@ -119,44 +97,34 @@ async function onStartCamera() {
   }
 }
 
-function addCapture(shot) {
-  if (captures.length >= ANGLES.length) {
-    toast('All four angles are captured.', 'warn');
-    return;
-  }
-  captures.push(shot);
-  renderAngles();
-}
-
 function onCapture() {
   if (!isRunning()) {
     toast('Start the camera first, or upload a photo.', 'warn');
     return;
   }
   try {
-    addCapture(captureFrame($('#cam')));
+    capture = captureFrame($('#cam'));
+    renderScan();
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
-async function onFiles(fileList) {
-  const files = [...fileList].slice(0, ANGLES.length - captures.length);
-  for (const file of files) {
-    try {
-      addCapture(await captureFromFile(file));
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+async function onFile(file) {
+  try {
+    capture = await captureFromFile(file);
+    renderScan();
+  } catch (err) {
+    toast(err.message, 'error');
   }
 }
 
 // ------------------------------------------------------------ identification
 
-function evidenceChips(fused) {
-  return fused.phrases
+function evidenceChips(reading) {
+  return reading.phrases
     .slice(0, 5)
-    .map((p) => `<span class="chip">${esc(p.display)}<em>${p.angles}×</em></span>`)
+    .map((p) => `<span class="chip">${esc(p.display)}</span>`)
     .join('');
 }
 
@@ -165,17 +133,13 @@ function analysingMarkup() {
     <div class="analysing">
       <div class="radar"><span></span><span></span><span></span></div>
       <h2>Reading the car</h2>
-      <p class="muted">Reverse-image searching ${captures.length} angle${captures.length > 1 ? 's' : ''} through Google Vision…</p>
-      <ul class="angle-status">
-        ${captures.map((c, i) => `
-          <li id="angle-status-${i}"><img src="${esc(c.thumb)}" alt=""><span>${ANGLES[i].label}</span><em>…</em></li>
-        `).join('')}
-      </ul>
+      <p class="muted">Reverse-image searching your photo through Google Vision…</p>
+      <div class="analysing-shot"><img src="${esc(capture.thumb)}" alt=""></div>
     </div>`;
 }
 
 async function onIdentify() {
-  if (!captures.length) return;
+  if (!capture) return;
 
   if (!hasApiKey()) {
     openOverlay('result', `
@@ -193,24 +157,10 @@ async function onIdentify() {
 
   openOverlay('result', analysingMarkup());
 
-  const results = await Promise.all(
-    captures.map(async (c, i) => {
-      try {
-        const r = await detectAngle(c.base64);
-        markAngle(i, 'ok');
-        return r;
-      } catch (err) {
-        markAngle(i, 'fail');
-        return { error: err };
-      }
-    }),
-  );
-
-  const errors = results.filter((r) => r?.error).map((r) => r.error);
-  const good = results.filter((r) => r && !r.error);
-
-  if (!good.length) {
-    const err = errors[0];
+  let detection;
+  try {
+    detection = await detectCar(capture.base64);
+  } catch (err) {
     openOverlay('result', `
       <button class="sheet-close" data-close aria-label="Close">✕</button>
       <div class="verdict verdict-error">
@@ -221,23 +171,14 @@ async function onIdentify() {
     return;
   }
 
-  const fused = fuseDetections(good);
-  const candidates = rankCandidates(fused);
-  lastResult = { ...resolve(fused, candidates), fused, partial: errors.length };
+  const reading = analyseDetection(detection);
+  const candidates = rankCandidates(reading);
+  lastResult = { ...resolve(reading, candidates), reading };
   renderVerdict();
 }
 
-function markAngle(i, state) {
-  const el = document.querySelector(`#angle-status-${i} em`);
-  if (el) {
-    el.textContent = state === 'ok' ? '✓' : '✕';
-    el.className = state === 'ok' ? 'ok' : 'fail';
-  }
-}
-
 function renderVerdict() {
-  const { status, car, candidates, fused, detectedName, partial } = lastResult;
-  const warn = partial ? `<p class="warn-line">${partial} angle${partial > 1 ? 's' : ''} could not be read.</p>` : '';
+  const { status, car, candidates, reading, detectedName } = lastResult;
 
   if (status === 'identified') {
     openOverlay('result', `
@@ -247,8 +188,7 @@ function renderVerdict() {
         <h2 class="verdict-name">${esc(car.make)} <strong>${esc(car.model)}</strong></h2>
         ${rarityPill(car.rarity)}
         <p class="verdict-sub">${esc(car.years)} · ${esc(car.engine)} · ${car.power} hp</p>
-        ${warn}
-        <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(fused)}</div>
+                <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>
         <button class="btn btn-primary btn-lg" data-log="${esc(car.id)}">
           ${isDiscovered(car.id) ? 'Log this sighting' : 'Add to Cardex'}
         </button>
@@ -264,8 +204,7 @@ function renderVerdict() {
         <p class="verdict-kicker">Narrow it down</p>
         <h2>Close, but not certain</h2>
         <p class="muted">Google matched this to more than one car in the index. Pick the right one.</p>
-        ${warn}
-        <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(fused)}</div>
+                <div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>
         <div class="candidates">${candidates.map(candidateRow).join('')}</div>
         <button class="btn btn-ghost" data-manual>Search the index instead</button>
       </div>`);
@@ -282,8 +221,7 @@ function renderVerdict() {
           ? 'Google read the car, but it is not one of the ' + CARS.length + ' cars in this index.'
           : 'Try again with the whole car in frame, from more than one angle.'}
       </p>
-      ${warn}
-      ${fused.phrases.length ? `<div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(fused)}</div>` : ''}
+            ${reading.phrases.length ? `<div class="evidence"><span class="muted small">Google saw</span>${evidenceChips(reading)}</div>` : ''}
       <button class="btn btn-ghost" data-manual>Search the index instead</button>
     </div>`);
 }
@@ -318,9 +256,8 @@ function logCar(carId) {
   if (!car) return;
 
   const result = recordCatch(carId, {
-    photos: captures.map((c) => c.thumb),
-    angles: captures.length,
-    color: captures[0]?.color || null,
+    photo: capture?.thumb || null,
+    color: capture?.color || null,
   });
 
   renderHeader();
@@ -328,9 +265,7 @@ function logCar(carId) {
     <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="reward" data-rarity="${car.rarity}">
       ${result.isNew ? '<p class="new-flag">NEW ENTRY</p>' : ''}
-      <div class="reward-art">${captures[0]
-        ? `<img src="${esc(captures[0].thumb)}" alt="">`
-        : ''}</div>
+      <div class="reward-art">${capture ? `<img src="${esc(capture.thumb)}" alt="">` : ''}</div>
       <h2 class="verdict-name">${esc(car.make)} <strong>${esc(car.model)}</strong></h2>
       ${rarityPill(car.rarity)}
       <div class="xp-gain">+${result.xp} XP</div>
@@ -347,8 +282,8 @@ function logCar(carId) {
       </div>
     </div>`);
 
-  captures = [];
-  renderAngles();
+  capture = null;
+  renderScan();
 }
 
 // -------------------------------------------------------------- index view
@@ -434,19 +369,12 @@ function wire() {
   $('#btn-start-cam').addEventListener('click', onStartCamera);
   $('#btn-capture').addEventListener('click', onCapture);
   $('#btn-identify').addEventListener('click', onIdentify);
-  $('#btn-clear').addEventListener('click', () => { captures = []; renderAngles(); });
+  $('#btn-retake').addEventListener('click', () => { capture = null; renderScan(); });
 
   $('#btn-upload-trigger').addEventListener('click', () => $('#file-input').click());
   $('#file-input').addEventListener('change', async (e) => {
-    await onFiles(e.target.files);
+    if (e.target.files[0]) await onFile(e.target.files[0]);
     e.target.value = '';
-  });
-
-  $('#angles').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-angle]');
-    if (!btn) return;
-    captures.splice(Number(btn.dataset.angle), 1);
-    renderAngles();
   });
 
   $('#filters').addEventListener('click', (e) => {
@@ -547,11 +475,11 @@ function wire() {
 function init() {
   wire();
   renderHeader();
-  renderAngles();
+  renderScan();
   renderIndex();
   if (!hasApiKey()) {
     $('#stage-empty-sub').textContent =
-      'Add a Google Vision API key in the Garage tab, then scan a car from up to four angles.';
+      'Add a Google Vision API key in the Garage tab, then point the camera at a car.';
   }
 }
 

@@ -41,22 +41,21 @@
           <span class="corner bl"></span><span class="corner br"></span>
           <span class="scanline"></span>
         </div>
-        <div class="stage-hint" id="stage-hint">Capture the <strong>front</strong> of the car</div>
+        <div class="stage-hint" id="stage-hint">Fit the whole car in frame</div>
+        <div class="shot-preview" id="shot-preview" hidden></div>
       </div>
-
-      <div class="angles" id="angles"></div>
 
       <div class="scan-controls">
-        <button class="btn btn-ghost" id="btn-upload-trigger" title="Add a photo from your device">Upload</button>
-        <button class="shutter" id="btn-capture" aria-label="Capture this angle"><span></span></button>
-        <button class="btn btn-ghost" id="btn-clear" disabled>Clear</button>
+        <button class="btn btn-ghost" id="btn-upload-trigger" title="Use a photo from your device">Upload</button>
+        <button class="shutter" id="btn-capture" aria-label="Take the photo"><span></span></button>
+        <button class="btn btn-ghost" id="btn-retake" hidden>Retake</button>
       </div>
-      <input type="file" id="file-input" accept="image/*" multiple hidden>
+      <input type="file" id="file-input" accept="image/*" hidden>
 
       <button class="btn btn-primary btn-identify" id="btn-identify" disabled>
         Identify car
       </button>
-      <p class="scan-note" id="scan-note">More angles means a more confident match.</p>
+      <p class="scan-note" id="scan-note">Stand back and fit the whole car in frame.</p>
     </section>
 
     <!-- ----------------------------------------------------------- INDEX -->

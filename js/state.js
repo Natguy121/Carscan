@@ -3,7 +3,6 @@
 import { CARS, CARS_BY_ID, RARITY, BODIES } from './cars.js';
 
 const SAVE_KEY = 'carscan.save.v1';
-const MAX_PHOTOS_PER_CAR = 4;
 
 const EMPTY = { xp: 0, scans: 0, entries: {}, achievements: [], created: null };
 
@@ -100,7 +99,7 @@ export function levelInfo(xp = state.xp) {
  * Log a confirmed catch.
  * @returns {{isNew:boolean, xp:number, breakdown:{label:string,value:number}[], levelUp:number|null, unlocked:object[]}}
  */
-export function recordCatch(carId, { photos = [], angles = 1, color = null } = {}) {
+export function recordCatch(carId, { photo = null, color = null } = {}) {
   const car = CARS_BY_ID.get(carId);
   if (!car) throw new Error(`unknown car ${carId}`);
 
@@ -119,26 +118,13 @@ export function recordCatch(carId, { photos = [], angles = 1, color = null } = {
     breakdown.push({ label: 'Repeat sighting', value: gained });
   }
 
-  if (angles >= 4) {
-    const bonus = Math.round(gained * 0.3);
-    gained += bonus;
-    breakdown.push({ label: 'Full sweep — 4 angles', value: bonus });
-  } else if (angles >= 3) {
-    const bonus = Math.round(gained * 0.15);
-    gained += bonus;
-    breakdown.push({ label: 'Three-angle scan', value: bonus });
-  }
-
   const now = Date.now();
   const entry = existing || { count: 0, firstSeen: now, photos: [], colors: [] };
   entry.count += 1;
   entry.lastSeen = now;
   if (color && !entry.colors.includes(color)) entry.colors.push(color);
-  if (photos.length) {
-    // Keep the best-documented catch: a later scan with more angles replaces
-    // a thinner one, otherwise the original photos stand.
-    if (photos.length >= (entry.photos?.length || 0)) entry.photos = photos.slice(0, MAX_PHOTOS_PER_CAR);
-  }
+  // The first photo you took of a car is the one the Cardex keeps.
+  if (photo && !entry.photos.length) entry.photos = [photo];
   state.entries[carId] = entry;
 
   state.xp += gained;

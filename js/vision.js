@@ -1,6 +1,5 @@
 // Identification via Google Cloud Vision WEB_DETECTION — the same reverse-image
-// machinery behind Lens-style "best guess" labels. Each captured angle is one
-// request; results are fused so angles that agree reinforce each other.
+// machinery behind Lens-style "best guess" labels. One photo, one request.
 
 const KEY_STORAGE = 'carscan.googleKey';
 const ENDPOINT = 'https://vision.googleapis.com/v1/images:annotate';
@@ -74,11 +73,11 @@ function extractYear(text) {
 }
 
 /**
- * Run WEB_DETECTION on one captured angle.
+ * Run WEB_DETECTION on the captured photo.
  * @param {string} base64 JPEG bytes, no data: prefix.
  * @returns {Promise<{bestGuess: string|null, entities: {name:string,score:number}[], pages: string[], year: number|null}>}
  */
-export async function detectAngle(base64, { signal } = {}) {
+export async function detectCar(base64, { signal } = {}) {
   const key = getApiKey();
   if (!key) throw new VisionError('no-key', 'No Google Cloud Vision API key set.');
 
@@ -148,61 +147,53 @@ export class VisionError extends Error {
 }
 
 /**
- * Fuse per-angle detections into one ranked view of what the car is.
+ * Turn one Vision response into a ranked view of what the car is.
  *
- * Agreement across angles is the whole point of walking around the car: a phrase
- * seen from three sides is far stronger evidence than one seen from a single
- * lucky shot, so it is scaled by how many angles produced it.
+ * A response carries Google's single best-guess label plus a spread of web
+ * entities; both are folded into phrase and token tallies the matcher scores
+ * against. The best guess is Google's own answer, so it carries the most weight,
+ * and entity weights decay by rank.
  */
-export function fuseDetections(angleResults) {
-  const found = angleResults.filter(Boolean);
-  if (!found.length) return { phrases: [], tokens: new Map(), year: null, angleCount: 0 };
+export function analyseDetection(result) {
+  if (!result) return { phrases: [], tokens: new Map(), year: null };
 
   const phrases = new Map(); // normalised phrase -> aggregate
-  const tokens = new Map(); // single token -> aggregate weight
+  const tokens = new Map(); // token (and adjacent-pair) -> aggregate weight
 
-  const addTokens = (map, text, weight, angleIdx) => {
+  const addTokens = (text, weight) => {
     for (const t of tokenKeys(text)) {
-      const cur = map.get(t) || { token: t, weight: 0, angles: new Set() };
+      const cur = tokens.get(t) || { token: t, weight: 0 };
       cur.weight += weight;
-      cur.angles.add(angleIdx);
-      map.set(t, cur);
+      tokens.set(t, cur);
     }
   };
 
-  const bump = (map, keyText, weight, angleIdx, display) => {
-    const key = tokenize(keyText).join(' ');
+  const addPhrase = (text, weight) => {
+    const key = tokenize(text).join(' ');
     if (!key) return;
-    const cur = map.get(key) || { key, display: display || keyText, weight: 0, angles: new Set() };
+    const cur = phrases.get(key) || { key, display: text, weight: 0 };
     cur.weight += weight;
-    cur.angles.add(angleIdx);
-    map.set(key, cur);
+    phrases.set(key, cur);
   };
 
-  found.forEach((result, i) => {
-    // The best-guess label is Google's own single answer — weight it heavily.
-    if (result.bestGuess) bump(phrases, result.bestGuess, 3.0, i, result.bestGuess);
+  if (result.bestGuess) {
+    addPhrase(result.bestGuess, 3.0);
+    addTokens(result.bestGuess, 3.0);
+  }
 
-    result.entities.forEach((entity, rank) => {
-      // Entity scores are unbounded and rank-ordered; damp by position.
-      const w = Math.min(entity.score, 2.5) * (1 / (1 + rank * 0.25));
-      bump(phrases, entity.name, w, i, entity.name);
-      addTokens(tokens, entity.name, w, i);
-    });
-
-    if (result.bestGuess) addTokens(tokens, result.bestGuess, 3.0, i);
+  result.entities.forEach((entity, rank) => {
+    // Entity scores are unbounded and rank-ordered; damp by position.
+    const w = Math.min(entity.score, 2.5) * (1 / (1 + rank * 0.25));
+    addPhrase(entity.name, w);
+    addTokens(entity.name, w);
   });
 
-  const agreement = (n) => 1 + 0.7 * (n - 1);
-  const rank = (m) =>
-    [...m.values()]
-      .map((v) => ({ ...v, angles: v.angles.size, score: v.weight * agreement(v.angles.size) }))
-      .sort((a, b) => b.score - a.score);
+  const rank = (map) =>
+    [...map.values()].map((v) => ({ ...v, score: v.weight })).sort((a, b) => b.score - a.score);
 
   return {
     phrases: rank(phrases),
     tokens: new Map(rank(tokens).map((t) => [t.token, t])),
-    year: found.map((r) => r.year).find((y) => y != null) ?? null,
-    angleCount: found.length,
+    year: result.year ?? null,
   };
 }
