@@ -2,7 +2,7 @@ import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
 import { classifyImage, embedImage, looksLikeVehicle, inferBody, topLabel, ClassifyError, warmUp } from './classify.js';
 import { candidatesForBody } from './match.js';
 import { remember, recall, memoryStats, forgetAll } from './memory.js';
-import { TRAIT_GROUPS, matchesTraits, usefulTraits } from './traits.js';
+import { TRAIT_GROUPS, TRAITS_BY_ID, matchesAnswers, answersForBody, bestQuestion, usefulTraits } from './traits.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
   getState, entryFor, isDiscovered, discoveredCount, completion, catchHistory,
@@ -15,7 +15,8 @@ const $ = (sel) => document.querySelector(sel);
 let capture = null;
 let filter = 'all';
 let lastResult = null;
-let selectedTraits = new Set();
+let traitAnswers = new Map();  // trait id -> true (yes) / false (no)
+let askedTraits = new Set();   // answered, auto-filled, or waved away as "not sure"
 let traitsOpen = false;
 
 // ------------------------------------------------------------------ toasts
@@ -182,7 +183,12 @@ async function onIdentify() {
 
   const { body, confidence } = inferBody(predictions);
   const learned = embedding ? recall(embedding) : null;
-  selectedTraits = new Set(); // a new photo starts from the whole index again
+  // Everything the shape already settles is answered from the model's own guess,
+  // but only when it was confident — a shaky guess auto-answered would quietly
+  // rule out the right car.
+  const trusted = Boolean(body) && confidence >= 0.6;
+  traitAnswers = trusted ? answersForBody(body) : new Map();
+  askedTraits = new Set(traitAnswers.keys());
   traitsOpen = false;
   lastResult = { predictions, body, confidence, label: topLabel(predictions), embedding, learned };
   renderVerdict();
@@ -202,13 +208,36 @@ function searchCars(query, limit) {
     .slice(0, limit);
 }
 
+// Below this many cars left, the list is short enough to just read.
+const ENOUGH = 5;
+
 /**
- * Thirty things you can check by looking at the car. The model only ever reads a
- * shape, so this is where the accuracy actually comes from — tick what you can
- * see and the index narrows to cars that match all of it.
+ * One question at a time, chosen for how much it narrows what's left. Nobody
+ * knows off the top of their head whether a car is a diesel, so the app asks
+ * rather than expecting the player to arrive already knowing which of thirty
+ * boxes to tick — and "Not sure" is always a real answer.
  */
-function traitPanel(pool) {
-  const offered = usefulTraits(pool, selectedTraits);
+function questionCard(pool) {
+  if (pool.length <= ENOUGH) return '';
+  const trait = bestQuestion(pool, askedTraits);
+  if (!trait) return '';
+
+  return `
+    <div class="quiz">
+      <p class="quiz-q">${esc(trait.question)}</p>
+      <div class="quiz-actions">
+        <button class="btn btn-primary quiz-btn" data-answer="${esc(trait.id)}" data-value="yes">Yes</button>
+        <button class="btn quiz-btn" data-answer="${esc(trait.id)}" data-value="no">No</button>
+        <button class="btn btn-ghost quiz-btn" data-answer="${esc(trait.id)}" data-value="skip">Not sure</button>
+      </div>
+    </div>`;
+}
+
+/** What has been settled so far, and a way to take any of it back. */
+function answerPanel(pool) {
+  const given = [...traitAnswers].map(([id, yes]) => ({ trait: TRAITS_BY_ID.get(id), yes })).filter((a) => a.trait);
+  const offered = usefulTraits(pool, new Set(traitAnswers.keys()));
+
   const groups = TRAIT_GROUPS
     .map(([key, label]) => {
       const chips = offered.filter((t) => t.group === key);
@@ -217,24 +246,26 @@ function traitPanel(pool) {
         <div class="trait-group">
           <p class="trait-group-label">${esc(label)}</p>
           <div class="trait-chips">
-            ${chips.map((t) => `
-              <button class="trait-chip${selectedTraits.has(t.id) ? ' is-on' : ''}"
-                      data-trait="${esc(t.id)}"
-                      aria-pressed="${selectedTraits.has(t.id)}">${esc(t.label)}</button>`).join('')}
+            ${chips.map((t) => {
+              const answer = traitAnswers.get(t.id);
+              const state = answer === true ? ' is-on' : answer === false ? ' is-off' : '';
+              return `<button class="trait-chip${state}" data-trait="${esc(t.id)}"
+                        aria-pressed="${answer === true}">${answer === false ? '✕ ' : ''}${esc(t.label)}</button>`;
+            }).join('')}
           </div>
         </div>`;
     })
     .join('');
 
-  const count = selectedTraits.size
-    ? `<span class="trait-count">${CARS.length} → ${pool.length}</span>`
-    : '<span class="trait-count muted">30 things to check</span>';
+  const summary = given.length
+    ? `${given.length} answered <span class="trait-count">${CARS.length} → ${pool.length}</span>`
+    : '<span class="trait-count muted">Or tick them yourself</span>';
 
   return `
-    <details class="traits"${traitsOpen || selectedTraits.size ? ' open' : ''}>
-      <summary>Narrow it down ${count}</summary>
+    <details class="traits"${traitsOpen ? ' open' : ''}>
+      <summary>Change my answers ${summary}</summary>
       ${groups}
-      ${selectedTraits.size ? '<button class="btn btn-ghost btn-small" data-clear-traits>Clear</button>' : ''}
+      ${given.length ? '<button class="btn btn-ghost btn-small" data-clear-traits>Start over</button>' : ''}
     </details>`;
 }
 
@@ -260,19 +291,19 @@ function renderVerdict(query = '') {
   // right car sits just outside the top few.
   const learnedCar = learned ? CARS_BY_ID.get(learned.carId) : null;
 
-  // Ticked traits narrow the whole index, not just the shortlist — that is what
-  // finds a car the body-style guess would never have surfaced.
-  const narrowing = selectedTraits.size > 0;
-  const pool = narrowing ? CARS.filter((car) => matchesTraits(car, selectedTraits)) : CARS;
+  // Answers narrow the whole index, not just the shortlist — that is what finds
+  // a car the body-style guess would never have surfaced.
+  const narrowing = traitAnswers.size > 0;
+  const pool = narrowing ? CARS.filter((car) => matchesAnswers(car, traitAnswers)) : CARS;
   const shortlistSize = narrowing ? 24 : (confidence >= 0.6 ? 8 : 12);
 
   let candidates;
   if (searching) {
-    candidates = searchCars(query, 20).filter((car) => matchesTraits(car, selectedTraits));
+    candidates = searchCars(query, 20).filter((car) => matchesAnswers(car, traitAnswers));
   } else {
     candidates = candidatesForBody(body, shortlistSize, catchHistory(), pool);
     // A car you have taught it outranks any guess made from the shape alone.
-    if (learnedCar && matchesTraits(learnedCar, selectedTraits)) {
+    if (learnedCar && matchesAnswers(learnedCar, traitAnswers)) {
       candidates = [learnedCar, ...candidates.filter((c) => c.id !== learnedCar.id)].slice(0, shortlistSize);
     }
   }
@@ -282,9 +313,12 @@ function renderVerdict(query = '') {
     ? `Looks like ${BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.${hedge}`
     : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
 
+  const asking = !searching && !learnedCar && pool.length > ENOUGH;
   const intro = learnedCar
     ? `You taught me this one — it looks like the ${esc(displayName(learnedCar))}. Tap it if that's right, or pick another.`
-    : `${esc(guess)} Pick the right one and I'll remember it, so next time I recognise it myself. Or search all ${CARS.length}.`;
+    : asking
+      ? `${esc(guess)} Answer a couple of questions and I'll find it — or pick it straight from the list below.`
+      : `${esc(guess)} Pick the right one and I'll remember it, so next time I recognise it myself.`;
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
@@ -292,9 +326,10 @@ function renderVerdict(query = '') {
       <p class="verdict-kicker">${learnedCar ? 'Recognised from memory' : esc(label || 'Car detected')}</p>
       <h2>${learnedCar ? 'Is this it?' : 'Which one is it?'}</h2>
       <p class="muted">${intro}</p>
+      ${asking ? questionCard(pool) : ''}
       <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
              value="${esc(query)}" autocomplete="off">
-      ${traitPanel(pool)}
+      ${answerPanel(pool)}
       <div class="candidates">
         ${candidates.length
           ? candidates.map((car) => candidateRow({ car })).join('')
@@ -508,16 +543,30 @@ function wire() {
     const pick = t.closest('[data-pick]');
     if (pick) return logCar(pick.dataset.pick);
 
+    const answer = t.closest('[data-answer]');
+    if (answer) {
+      const { answer: id, value } = answer.dataset;
+      if (value === 'yes') traitAnswers.set(id, true);
+      else if (value === 'no') traitAnswers.set(id, false);
+      else traitAnswers.delete(id); // "not sure" — never counted, never asked again
+      askedTraits.add(id);
+      return renderVerdict($('#verdict-search')?.value || '');
+    }
+
+    // The panel cycles a trait through yes → no → unanswered.
     const trait = t.closest('[data-trait]');
     if (trait) {
       const id = trait.dataset.trait;
-      if (selectedTraits.has(id)) selectedTraits.delete(id);
-      else selectedTraits.add(id);
+      const current = traitAnswers.get(id);
+      if (current === undefined) { traitAnswers.set(id, true); askedTraits.add(id); }
+      else if (current === true) traitAnswers.set(id, false);
+      else { traitAnswers.delete(id); askedTraits.delete(id); }
       traitsOpen = true;
       return renderVerdict($('#verdict-search')?.value || '');
     }
     if (t.closest('[data-clear-traits]')) {
-      selectedTraits.clear();
+      traitAnswers.clear();
+      askedTraits.clear();
       traitsOpen = true;
       return renderVerdict($('#verdict-search')?.value || '');
     }
