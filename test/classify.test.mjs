@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { looksLikeVehicle, inferBody, inferBodyFromPredictions, topLabel } from '../js/classify.js';
+import { looksLikeVehicle, inferBody, inferBodyFromPredictions, inferCharacter, topLabel } from '../js/classify.js';
 
 /** Build a fake MobileNet prediction list, most confident first. */
 function predictions(...pairs) {
@@ -78,4 +78,34 @@ test('no vehicle classes means no body style and no confidence', () => {
   const r = inferBody(predictions(['golden retriever', 0.9]));
   assert.equal(r.body, null);
   assert.equal(r.confidence, 0);
+});
+
+// --------------------------------------------------------------- character
+
+test('a sports car reads as sporty, a minivan as family, a pickup as a workhorse', () => {
+  assert.equal(inferCharacter(predictions(['sports car, sport car', 0.7])).character, 'sporty');
+  assert.equal(inferCharacter(predictions(['minivan', 0.6])).character, 'family');
+  assert.equal(inferCharacter(predictions(['pickup, pickup truck', 0.6])).character, 'workhorse');
+});
+
+test('a fast SUV is read as sporty even though the body style says SUV', () => {
+  // What a Urus or Cayenne Turbo actually returns: sports car and jeep together.
+  const preds = predictions(['jeep, landrover', 0.45], ['sports car, sport car', 0.30]);
+  assert.equal(inferBodyFromPredictions(preds), 'suv', 'the shape is still an SUV');
+  assert.equal(inferCharacter(preds).character, 'sporty', 'but it does not look like a school-run SUV');
+});
+
+test('an ordinary car has no character rather than a guessed one', () => {
+  assert.equal(inferCharacter(predictions(['cab, hack, taxi', 0.8])), null);
+  assert.equal(inferCharacter(predictions(['golden retriever', 0.9])), null);
+});
+
+test('a genuinely split read is left uncalled rather than forced', () => {
+  const split = inferCharacter(predictions(['sports car, sport car', 0.3], ['minivan', 0.3]));
+  assert.equal(split, null, 'half sports car and half minivan is not a character');
+});
+
+test('character strength is that character’s share of what was seen', () => {
+  const clear = inferCharacter(predictions(['sports car, sport car', 0.8], ['minivan', 0.05]));
+  assert.ok(clear.strength > 0.9, `expected a strong read, got ${clear.strength}`);
 });

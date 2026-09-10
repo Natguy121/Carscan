@@ -655,24 +655,6 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .xp-breakdown em { font-style: normal; color: var(--accent); font-family: var(--mono); }
 .levelup { margin-top: .8rem; font-family: var(--mono); color: var(--r-legendary); letter-spacing: .1em; }
-/* --------------------------------------------------- one question at a time */
-
-.quiz {
-  margin: .9rem 0 .2rem;
-  padding: .9rem .8rem .8rem;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-.quiz-q {
-  font-size: .95rem;
-  line-height: 1.35;
-  margin-bottom: .75rem;
-  text-align: center;
-}
-.quiz-actions { display: flex; gap: .4rem; }
-.quiz-btn { flex: 1; margin-top: 0; padding: .55rem .4rem; font-size: .85rem; }
-
 /* ------------------------------------------------- narrow-it-down traits */
 
 .traits {

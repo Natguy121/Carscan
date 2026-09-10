@@ -28,18 +28,20 @@ G80 M3 are separate catches.
    commonest on the road. When the body-style guess is shaky the list widens and
    says so.
 
-   **Can't see it in the list? It asks.** Nobody knows off the top of their head
-   whether a car is a diesel, so you are never handed thirty boxes and left to
-   work out which to tick. The shape questions answer themselves from what the
-   model saw, and then it asks one question at a time — *Is the badge Japanese?
-   Does it have a third row? Does it look modern?* — always whichever question
-   splits the remaining cars most evenly, preferring ones you can answer standing
-   on the pavement. **Not sure** is always an answer, and a *no* narrows as hard
-   as a *yes*.
+   **It reads character, not just shape.** Two cars can share a body style and
+   have nothing else in common — a Lamborghini Urus and a school-run RAV4 are
+   both SUVs — and the model does see the difference, calling one a sports car
+   and the other a jeep. That read reorders the shortlist, so a sporty-looking
+   SUV puts the fast ones first and a family-sized one puts the seven-seaters
+   first. It only ever reorders; it can never hide a car, because a "sports car"
+   reading might just be a four-seat GT.
 
-   Four questions took 898 cars down to four, with the Fortuner among them, on a
-   scan whose shortlist had never offered it. You can still tick the thirty
-   yourself under *Change my answers*, and take any answer back.
+   **Can't see it in the list? Narrow it down.** Thirty things you can check
+   from the pavement — sits up high, Japanese badge, diesel clatter, V8 rumble,
+   seven seats, looks pre-1990 — each a filter over the whole index. The shape
+   ones fill themselves in from what the model saw, so you only ever tick what it
+   couldn't tell. A tick cycles yes → no → unanswered, and a *no* narrows as hard
+   as a *yes*.
 
    **Whatever you tap, it learns.** Confirming a car files that photo's
    fingerprint under it, and the next time you scan something similar the app
@@ -92,11 +94,11 @@ npm test
 
 Covers the recognition mapping (ImageNet classes → body style, weighted by
 confidence; telling a car photo from a non-car one), the shortlist ranking
-(body style outranking history, history outranking commonness), the thirty
-traits and the questioning (each trait splits the index, the shape answers
-itself from the guess, easy questions come first, a settled question is never
-asked twice, and truthful answers never lose the car),
-the learned memory (recognising a car from a similar photo, refusing to match an
+(body style outranking character, character outranking history, history
+outranking commonness), the character read (a fast SUV read apart from a
+school-run one, a split read left uncalled, and reordering that never drops a
+car), the thirty traits (each splits the index, the shape fills itself in from
+the guess, dead ends are never offered), the learned memory (recognising a car from a similar photo, refusing to match an
 unrelated one, staying inside its storage budget), and database integrity —
 every entry unique, well formed, and using a real body style and rarity.
 
@@ -104,10 +106,10 @@ every entry unique, well formed, and using a real body style and rarity.
 
 | File | Role |
 | --- | --- |
-| `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `looksLikeVehicle` decides whether the photo has a car in it at all. Both are pure functions, easy to test without a model. |
-| `js/traits.js` | The thirty things to look for, and which to ask about next. Every trait is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec asked as a question. `answersForBody` settles every shape question from the model's guess without asking. `bestQuestion` scores the rest by how evenly they split what's left (binary entropy) weighted by how answerable they are from the pavement, and never asks one whose answer is already the same for every remaining car. |
+| `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `inferCharacter` reads sporty / hard-working / family-sized off the same predictions, and returns nothing at all when the read is split. `looksLikeVehicle` decides whether the photo has a car in it. All pure functions, easy to test without a model. |
+| `js/traits.js` | The thirty things to look for. Every trait is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec turned into something you can check by looking. `answersForBody` settles all six shape traits from the model's own guess. Traits that would empty the list, or that every remaining car shares, are withheld. |
 | `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. |
-| `js/match.js` | Builds the shortlist: body style first, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
+| `js/match.js` | Builds the shortlist: body style first, then whether the car fits the character the photo read as, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
 | `js/cars.js` | The 898 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
 | `js/camera.js` | Capture, downscaling, and the dominant-colour read. |

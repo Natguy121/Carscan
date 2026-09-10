@@ -78,3 +78,38 @@ test('database entries are well formed and uniquely identified', () => {
   }
   assert.ok(CARS.length >= 890);
 });
+
+// --------------------------------------------------- character from the photo
+
+test('a sporty read pulls the fast cars of that body style to the front', () => {
+  const plain = candidatesForBody('suv', 8);
+  const sporty = candidatesForBody('suv', 8, { character: 'sporty' });
+
+  assert.ok(sporty.every((c) => c.body === 'suv'), 'still only SUVs');
+  const quick = (list) => list.filter((c) => c.zeroToSixty <= 5.5).length;
+  assert.ok(quick(sporty) > quick(plain), 'a sporty read should surface the fast SUVs');
+});
+
+test('a family read pulls the seven-seaters up instead', () => {
+  const family = candidatesForBody('suv', 8, { character: 'family' });
+  assert.ok(family.filter((c) => c.seats >= 6).length >= 4, 'expected mostly big-seat SUVs');
+});
+
+test('character only reorders — it never drops a car from the pool', () => {
+  const pool = CARS.filter((c) => c.body === 'suv');
+  const ranked = candidatesForBody('suv', pool.length, { character: 'sporty' }, pool);
+  assert.equal(ranked.length, pool.length);
+  assert.deepEqual(new Set(ranked.map((c) => c.id)), new Set(pool.map((c) => c.id)));
+});
+
+test('a matching body style still outranks a matching character', () => {
+  const ranked = candidatesForBody('minivan', 8, { character: 'sporty' });
+  assert.ok(ranked.every((c) => c.body === 'minivan'), 'the shape the model saw comes first');
+});
+
+test('no character read leaves the ranking exactly as it was', () => {
+  assert.deepEqual(
+    candidatesForBody('suv', 8, {}).map((c) => c.id),
+    candidatesForBody('suv', 8, { character: null }).map((c) => c.id),
+  );
+});

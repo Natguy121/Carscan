@@ -148,6 +148,49 @@ export function looksLikeVehicle(predictions, threshold = 0.12) {
   return mass >= threshold;
 }
 
+// What kind of car it is, on top of what shape it is. Two cars can share a body
+// style and have nothing else in common — a Lamborghini Urus and a school-run
+// RAV4 are both SUVs — and the model does see the difference, calling one a
+// sports car and the other a jeep. Collapsing everything to a body style threw
+// that away.
+const CHARACTERS = {
+  sporty: ['sports car', 'racer', 'convertible', 'go-kart'],
+  workhorse: ['pickup', 'tow truck', 'trailer truck', 'garbage truck', 'fire engine',
+    'moving van', 'snowplow', 'half track', 'police van', 'ambulance'],
+  family: ['minivan', 'school bus', 'recreational vehicle', 'beach wagon',
+    'station wagon', 'minibus', 'trolleybus'],
+};
+
+/**
+ * The dominant character of the car in the photo, or null when the classes are
+ * too mixed to say. Never used to rule a car out — only to order the shortlist,
+ * because a "sports car" reading can just as easily be a four-seat GT, and a
+ * filter built on that would hide the right answer.
+ *
+ * @returns {{character: string, strength: number}|null} strength is that
+ *   character's share of the characterful classes seen, 0–1.
+ */
+export function inferCharacter(predictions, threshold = 0.55) {
+  const scores = new Map();
+  let total = 0;
+
+  for (const p of predictions) {
+    const name = p.className.toLowerCase();
+    for (const [character, keywords] of Object.entries(CHARACTERS)) {
+      if (keywords.some((k) => name.includes(k))) {
+        scores.set(character, (scores.get(character) || 0) + p.probability);
+        total += p.probability;
+        break;
+      }
+    }
+  }
+
+  if (!total) return null;
+  const [character, score] = [...scores].sort((a, b) => b[1] - a[1])[0];
+  const strength = score / total;
+  return strength >= threshold ? { character, strength } : null;
+}
+
 /**
  * Body style the predictions point to, weighted by confidence.
  *
