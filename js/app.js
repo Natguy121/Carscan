@@ -2,6 +2,10 @@ import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
 import { classifyImage, embedImage, looksLikeVehicle, inferBody, inferCharacter, topLabel, ClassifyError, warmUp } from './classify.js';
 import { candidatesForBody } from './match.js';
 import { remember, recall, memoryStats, forgetAll } from './memory.js';
+import {
+  hasPassword, setPassword, checkPassword, teachLogo, recallLogo,
+  logoStats, forgetLogos, exportLogos, importLogos,
+} from './logos.js';
 import { TRAIT_GROUPS, TRAITS_BY_ID, matchesAnswers, answersForBody, usefulTraits } from './traits.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
@@ -19,6 +23,18 @@ let traitAnswers = new Map();  // trait id -> true (has it) / false (doesn't)
 let traitsOpen = false;
 let selectedMake = null;   // the exact make, read off the badge by the player
 let makeQuery = '';        // what's typed in the badge box before a make is picked
+
+// --------------------------------------------------------------- logo trainer
+//
+// Teaching the app what a badge looks like, from close-up photos, gated by a
+// password that lives only in this browser (see js/logos.js for what that gate
+// actually is and isn't). Session-only: reloading the page re-locks it.
+
+let trainerUnlocked = false;
+let trainerCapture = null; // { preview, thumb } for the badge photo being taught
+let trainerMake = '';
+let trainerNote = '';
+let trainerError = '';
 
 // ------------------------------------------------------------------ toasts
 
@@ -150,13 +166,13 @@ function analysingMarkup() {
     </div>`;
 }
 
-/** Load `capture.preview` into an <img> the model can read pixels from. */
-function loadCaptureImage() {
+/** Load a data URL into an <img> the model can read pixels from. */
+function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Could not read the captured photo.'));
-    img.src = capture.preview;
+    img.onerror = () => reject(new Error('Could not read that photo.'));
+    img.src = src;
   });
 }
 
@@ -168,7 +184,7 @@ async function onIdentify() {
   let predictions;
   let embedding = null;
   try {
-    const img = await loadCaptureImage();
+    const img = await loadImage(capture.preview);
     predictions = await classifyImage(img);
     embedding = await embedImage(img);
   } catch (err) {
@@ -185,6 +201,11 @@ async function onIdentify() {
   const { body, confidence } = inferBody(predictions);
   const character = inferCharacter(predictions);
   const learned = embedding ? recall(embedding) : null;
+  // A bonus signal from the logo trainer, if anything has been taught. Trained
+  // photos are close-ups of just the badge, so this only really fires when a
+  // scan happens to land close to the same framing — worth checking since it's
+  // free, but it is not the app reading a logo out of an arbitrary photo.
+  const logoMatch = embedding ? recallLogo(embedding) : null;
   // Everything the shape already settles is answered from the model's own guess,
   // but only when it was confident — a shaky guess auto-answered would quietly
   // rule out the right car.
@@ -193,7 +214,7 @@ async function onIdentify() {
   traitsOpen = false;
   selectedMake = null;
   makeQuery = '';
-  lastResult = { predictions, body, confidence, character, label: topLabel(predictions), embedding, learned };
+  lastResult = { predictions, body, confidence, character, label: topLabel(predictions), embedding, learned, logoMatch };
   renderVerdict();
 }
 
@@ -220,7 +241,7 @@ function searchCars(query, limit) {
  * it can never suggest a make that answers or a picked make have already ruled
  * out, and it narrows the same way the traits do rather than filtering by name.
  */
-function badgePicker(pool) {
+function badgePicker(pool, logoMatch) {
   if (selectedMake) {
     return `
       <div class="badge-picked">
@@ -233,8 +254,19 @@ function badgePicker(pool) {
   const makes = [...new Set(pool.map((c) => c.make))].sort((a, b) => a.localeCompare(b));
   const suggestions = q ? makes.filter((m) => m.toLowerCase().includes(q)).slice(0, 8) : [];
 
+  // A trained-logo guess, offered as a question, never applied on its own —
+  // it's only ever confident when a scan happens to frame the badge the way
+  // the training photos did, so it's a hint worth a tap, not a claim.
+  const logoHint = logoMatch && makes.includes(logoMatch.make)
+    ? `<div class="badge-hint">
+         <span class="muted small">Trained badge match:</span>
+         <button class="trait-chip" data-pick-make="${esc(logoMatch.make)}">${esc(logoMatch.make)}?</button>
+       </div>`
+    : '';
+
   return `
     <div class="badge-picker">
+      ${logoHint}
       <input class="search" id="badge-search" type="text" inputmode="text"
              placeholder="Read the badge? Type the make…" value="${esc(makeQuery)}" autocomplete="off">
       ${suggestions.length ? `
@@ -284,7 +316,7 @@ function answerPanel(pool) {
 }
 
 function renderVerdict(query = '') {
-  const { body, label, confidence, character, learned } = lastResult;
+  const { body, label, confidence, character, learned, logoMatch } = lastResult;
 
   if (!looksLikeVehicle(lastResult.predictions)) {
     openOverlay('result', `
@@ -347,7 +379,7 @@ function renderVerdict(query = '') {
       <p class="muted">${intro}</p>
       <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
              value="${esc(query)}" autocomplete="off">
-      ${badgePicker(pool)}
+      ${badgePicker(pool, logoMatch)}
       ${answerPanel(pool)}
       <div class="candidates">
         ${candidates.length
@@ -502,6 +534,155 @@ function renderGarage() {
   }).join('');
 }
 
+// --------------------------------------------------------------- logo trainer
+
+const MAKES = [...new Set(CARS.map((c) => c.make))].sort((a, b) => a.localeCompare(b));
+
+function trainerSetupMarkup() {
+  return `
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div class="verdict trainer">
+      <p class="verdict-kicker">Logo trainer</p>
+      <h2>Set a password first</h2>
+      <p class="muted">Nothing is sent anywhere — this password lives only in this browser and only
+        keeps someone else who opens the app from filling the trainer with junk. It will not stop
+        someone who opens developer tools, so don't reuse a real password here.</p>
+      <input class="search" id="trainer-pw1" type="password" placeholder="New password (4+ characters)" autocomplete="new-password">
+      <input class="search" id="trainer-pw2" type="password" placeholder="Type it again" autocomplete="new-password">
+      ${trainerError ? `<p class="warn-line">${esc(trainerError)}</p>` : ''}
+      <button class="btn btn-primary" data-trainer-setup>Set password</button>
+    </div>`;
+}
+
+function trainerLockedMarkup() {
+  return `
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div class="verdict trainer">
+      <p class="verdict-kicker">Logo trainer</p>
+      <h2>Enter the password</h2>
+      <input class="search" id="trainer-pw" type="password" placeholder="Password" autocomplete="current-password">
+      ${trainerError ? `<p class="warn-line">${esc(trainerError)}</p>` : ''}
+      <button class="btn btn-primary" data-trainer-unlock>Unlock</button>
+    </div>`;
+}
+
+function trainerUnlockedMarkup() {
+  const { samples, makes } = logoStats();
+  return `
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div class="verdict trainer">
+      <p class="verdict-kicker">Logo trainer</p>
+      <h2>Teach a badge</h2>
+      <p class="muted">${samples} photo${samples === 1 ? '' : 's'} learned across ${makes} make${makes === 1 ? '' : 's'}.
+        Take a close, well-lit photo of just the badge — no need for the rest of the car.</p>
+
+      <select class="search" id="trainer-make">
+        <option value="">Which make is this?</option>
+        ${MAKES.map((m) => `<option value="${esc(m)}"${m === trainerMake ? ' selected' : ''}>${esc(m)}</option>`).join('')}
+      </select>
+
+      ${trainerCapture
+        ? `<div class="trainer-shot"><img src="${esc(trainerCapture.preview)}" alt="The badge photo"></div>
+           <button class="btn btn-ghost btn-small" data-trainer-retake>Retake</button>`
+        : `<button class="btn btn-ghost" data-trainer-upload>Upload a badge photo</button>`}
+
+      ${trainerNote ? `<p class="taught">${esc(trainerNote)}</p>` : ''}
+
+      <button class="btn btn-primary" data-trainer-teach ${trainerMake && trainerCapture ? '' : 'disabled'}>
+        Teach this logo
+      </button>
+
+      <div class="trainer-tools">
+        <button class="btn btn-ghost btn-small" data-trainer-export>Export trained set</button>
+        <button class="btn btn-ghost btn-small" data-trainer-import>Import</button>
+        <button class="btn btn-danger btn-small" data-trainer-forget>Forget all</button>
+      </div>
+      <button class="link-btn" data-trainer-lock>Lock trainer</button>
+    </div>`;
+}
+
+function renderTrainer() {
+  const html = !hasPassword() ? trainerSetupMarkup()
+    : !trainerUnlocked ? trainerLockedMarkup()
+      : trainerUnlockedMarkup();
+  openOverlay('detail', html);
+}
+
+/** Fresh entry point: start from a clean slate rather than a stale error. */
+function openTrainer() {
+  trainerError = '';
+  renderTrainer();
+}
+
+async function onTrainerSetup() {
+  const pw1 = $('#trainer-pw1')?.value || '';
+  const pw2 = $('#trainer-pw2')?.value || '';
+  if (pw1 !== pw2) { trainerError = "Those don't match."; return renderTrainer(); }
+  try {
+    await setPassword(pw1);
+  } catch (err) {
+    trainerError = err.message;
+    return renderTrainer();
+  }
+  trainerUnlocked = true;
+  renderTrainer();
+}
+
+async function onTrainerUnlock() {
+  const pw = $('#trainer-pw')?.value || '';
+  if (!(await checkPassword(pw))) {
+    trainerError = 'Wrong password.';
+    return renderTrainer();
+  }
+  trainerUnlocked = true;
+  renderTrainer();
+}
+
+async function onTrainerFile(file) {
+  try {
+    trainerCapture = await captureFromFile(file);
+    trainerNote = '';
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+  renderTrainer();
+}
+
+async function onTrainerTeach() {
+  if (!trainerMake || !trainerCapture) return;
+  const img = await loadImage(trainerCapture.preview);
+  const embedding = await embedImage(img);
+  if (!embedding) {
+    trainerNote = "Could not read that photo — try again.";
+    return renderTrainer();
+  }
+  teachLogo(trainerMake, embedding);
+  const count = logoStats().perMake.get(trainerMake) || 0;
+  trainerNote = `Learned ${trainerMake} (${count} photo${count === 1 ? '' : 's'} now).`;
+  trainerCapture = null;
+  renderTrainer();
+}
+
+function onTrainerExport() {
+  const blob = new Blob([exportLogos()], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'carscan-logos.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function onTrainerImportFile(file) {
+  try {
+    const added = importLogos(await file.text());
+    trainerNote = `Imported ${added} photo${added === 1 ? '' : 's'}.`;
+  } catch {
+    trainerNote = "That file didn't look like a trained set.";
+  }
+  renderTrainer();
+}
+
 // -------------------------------------------------------------- car detail
 
 function openCar(carId) {
@@ -524,6 +705,16 @@ function wire() {
   $('#btn-upload-trigger').addEventListener('click', () => $('#file-input').click());
   $('#file-input').addEventListener('change', async (e) => {
     if (e.target.files[0]) await onFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  $('#btn-logo-trainer').addEventListener('click', openTrainer);
+  $('#logo-file-input').addEventListener('change', async (e) => {
+    if (e.target.files[0]) await onTrainerFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#logo-import-input').addEventListener('change', async (e) => {
+    if (e.target.files[0]) await onTrainerImportFile(e.target.files[0]);
     e.target.value = '';
   });
 
@@ -605,6 +796,27 @@ function wire() {
     if (viewCar) {
       closeOverlay('result');
       openCar(viewCar.dataset.viewCar);
+      return;
+    }
+
+    if (t.closest('[data-trainer-setup]')) return onTrainerSetup();
+    if (t.closest('[data-trainer-unlock]')) return onTrainerUnlock();
+    if (t.closest('[data-trainer-upload]')) return $('#logo-file-input').click();
+    if (t.closest('[data-trainer-retake]')) { trainerCapture = null; return renderTrainer(); }
+    if (t.closest('[data-trainer-teach]')) return onTrainerTeach();
+    if (t.closest('[data-trainer-export]')) return onTrainerExport();
+    if (t.closest('[data-trainer-import]')) return $('#logo-import-input').click();
+    if (t.closest('[data-trainer-forget]')) {
+      forgetLogos();
+      trainerNote = 'Forgot every trained badge.';
+      return renderTrainer();
+    }
+    if (t.closest('[data-trainer-lock]')) {
+      trainerUnlocked = false;
+      trainerCapture = null;
+      trainerNote = '';
+      trainerError = '';
+      return closeOverlay('detail');
     }
   });
 
@@ -614,6 +826,10 @@ function wire() {
     if (e.target.id === 'badge-search') {
       makeQuery = e.target.value;
       renderVerdict($('#verdict-search')?.value || '');
+    }
+    if (e.target.id === 'trainer-make') {
+      trainerMake = e.target.value;
+      renderTrainer();
     }
   });
 

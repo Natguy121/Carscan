@@ -41,6 +41,9 @@ G80 M3 are separate catches.
    typing the make you can actually see on the car cuts the index straight down
    to it: 898 → 17 for Toyota's SUVs alone. It only ever suggests makes still
    possible given everything else you've told it, never one already ruled out.
+   If badges have been taught in the [Logo trainer](#logo-trainer), a trained
+   match shows up here too, as a "Trained badge match" chip to confirm — a hint,
+   never an autofill.
 
    **Can't see it in the list? Narrow it down.** Thirty more things you can
    check from the pavement — sits up high, diesel clatter, V8 rumble, seven
@@ -122,6 +125,7 @@ every entry unique, well formed, and using a real body style and rarity.
 | `js/app.js` (badge picker) | The one exact-match filter that isn't a trait: type the make you can actually read on the car and the whole index narrows to it. Suggestions are drawn only from makes still possible given every other answer, the same "no dead ends" rule the traits follow. This is the closest thing to "brand recognition" in the app, and it works by trusting the player's eyes rather than pretending MobileNet can read a logo. |
 | `js/traits.js` | The thirty things to look for. Every trait is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec turned into something you can check by looking. `answersForBody` settles all six shape traits from the model's own guess. Traits that would empty the list, or that every remaining car shares, are withheld. |
 | `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. |
+| `js/logos.js` | The same fingerprint trick as `memory.js`, filed under a make instead of a car, from a close-up photo of just the badge. See [Logo trainer](#logo-trainer) below. |
 | `js/match.js` | Builds the shortlist: body style first, then whether the car fits the character the photo read as, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
 | `js/cars.js` | The 898 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
@@ -139,6 +143,41 @@ it. So the app is vague on day one and sharp on the cars you actually see, which
 is the opposite of a cloud model and, for a game about your own street, more
 useful. Nothing is downloaded and nothing is uploaded to make that happen.
 
+## Logo trainer
+
+A "Logo trainer" link sits at the bottom of the Garage. It exists because
+MobileNet has no concept of a car badge — its 1,000 ImageNet categories don't
+include logos, and a real logo detector needs its own labeled dataset and
+training pipeline, the same wall hit trying to get exact make/model
+recognition generally. This is the honest alternative: teach the app from
+photos yourself, on-device, the same embedding trick `memory.js` already uses
+for whole cars, just filed under a make instead of a car and trained from a
+close-up of just the badge rather than the whole vehicle.
+
+**The password.** First time you open it, you set one. There's no server, so
+it's checked against a SHA-256 hash kept in this browser's own local storage —
+never the plaintext, and nothing sent anywhere. Be clear about what this
+actually is: it stops another player on the same device from casually filling
+the trainer with junk. It does **not** stop anyone who opens developer tools —
+that's a real limit of a password with no server behind it, not a bug — so
+never reuse a password you use anywhere else.
+
+**Training only affects this device.** Like everything else here, trained
+badges live in local storage, not a shared database. *Export trained set*
+downloads them as JSON; *Import* merges a file back in. That's how a trained
+set moves between devices, or how you'd hand one to someone else to bake into
+their own copy of the app.
+
+**How it's used.** A trained badge only ever appears as a suggestion chip —
+"Trained badge match: Toyota?" — next to the badge-typing box on a scan,
+never an automatic pick. It also only fires when a scan happens to be framed
+similarly to the training photos, since the fingerprint is sensitive to what's
+actually in the picture: a close-up of a badge and a photo of a whole car
+rarely land close together even when it's the same make. That's a real
+limitation of doing this with a general-purpose model rather than one trained
+specifically to find logos in a wider scene — worth having since it's free
+when it works, but not a substitute for reading the badge yourself.
+
 ## Adding cars
 
 Append to `CARS` in `js/cars.js`. The fields are self-explanatory; `rarity` must
@@ -151,7 +190,8 @@ numbers on a spec sheet are true.
 
 ## Privacy
 
-Nothing leaves your device. Recognition runs locally, and progress, photos and
-the learned fingerprints live in local storage on your device only. There is no
+Nothing leaves your device. Recognition runs locally, and progress, photos,
+the learned fingerprints, and anything taught in the logo trainer (including
+its password hash) live in local storage on your device only. There is no
 server and no account. Resetting progress in the Garage also wipes what it has
-learned.
+learned; the logo trainer's own *Forget all* clears just the trained badges.
