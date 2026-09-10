@@ -253,10 +253,13 @@ function renderVerdict(query = '') {
     openOverlay('result', `
       <button class="sheet-close" data-close aria-label="Close">✕</button>
       <div class="verdict">
-        <p class="verdict-kicker">No car found</p>
-        <h2>Could not spot a car in that photo</h2>
-        <p class="muted">Try again with the whole car in frame and well lit.</p>
-        <button class="btn btn-ghost" data-manual>Search the index instead</button>
+        <p class="verdict-kicker">Not sure</p>
+        <h2>Couldn't tell if that's a car</h2>
+        <p class="muted">A steep angle, a photo from above, or the car mostly hidden behind
+          something can all throw it off — it isn't only for empty photos. If you can see the
+          car, it's there; the model just couldn't confirm it.</p>
+        <button class="btn btn-primary" data-manual>Yes, it's a car — let me pick it</button>
+        <button class="btn btn-ghost" data-rescan>Retake instead</button>
       </div>`);
     return;
   }

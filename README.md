@@ -49,7 +49,13 @@ G80 M3 are separate catches.
    top. The more you play, the more it knows the cars on *your* street.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo
    of it, the colour you caught it in, and the date. Rarer cars are worth more
-   XP. A photo with no car in it at all is turned away.
+   XP.
+
+A photo the model can't find a car in at all — a steep angle from above, the car
+mostly hidden behind something, bad light — gets a **"Couldn't tell if that's a
+car"** screen, not a dead end. One tap on *Yes, it's a car* drops straight into
+the full 898-car list, so a genuine car is never actually turned away; the model
+only ever fails to confirm one, and you always get the last word.
 
 Rarity runs Common → Uncommon → Rare → Epic → Legendary, and reflects how often
 you would actually see the car on the road, not how good it is. There are eleven
