@@ -655,6 +655,18 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .xp-breakdown em { font-style: normal; color: var(--accent); font-family: var(--mono); }
 .levelup { margin-top: .8rem; font-family: var(--mono); color: var(--r-legendary); letter-spacing: .1em; }
+/* ------------------------------------------------------------ badge picker */
+
+.badge-picker { margin: .7rem 0 0; text-align: left; }
+.badge-suggestions { margin-top: .45rem; }
+.badge-picked {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: .7rem 0 0;
+}
+.badge-picked .trait-chip { pointer-events: none; }
+
 /* ------------------------------------------------- narrow-it-down traits */
 
 .traits {

@@ -36,10 +36,16 @@ G80 M3 are separate catches.
    first. It only ever reorders; it can never hide a car, because a "sports car"
    reading might just be a four-seat GT.
 
-   **Can't see it in the list? Narrow it down.** Thirty things you can check
-   from the pavement — sits up high, Japanese badge, diesel clatter, V8 rumble,
-   seven seats, looks pre-1990 — each a filter over the whole index. The shape
-   ones fill themselves in from what the model saw, so you only ever tick what it
+   **Read the badge and it narrows to just that make.** The model can't read a
+   logo — MobileNet has no idea what a Toyota badge looks like — but you can, so
+   typing the make you can actually see on the car cuts the index straight down
+   to it: 898 → 17 for Toyota's SUVs alone. It only ever suggests makes still
+   possible given everything else you've told it, never one already ruled out.
+
+   **Can't see it in the list? Narrow it down.** Thirty more things you can
+   check from the pavement — sits up high, diesel clatter, V8 rumble, seven
+   seats, looks pre-1990 — each a filter over the whole index. The shape ones
+   fill themselves in from what the model saw, so you only ever tick what it
    couldn't tell. A tick cycles yes → no → unanswered, and a *no* narrows as hard
    as a *yes*.
 
@@ -113,6 +119,7 @@ every entry unique, well formed, and using a real body style and rarity.
 | File | Role |
 | --- | --- |
 | `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `inferCharacter` reads sporty / hard-working / family-sized off the same predictions, and returns nothing at all when the read is split. `looksLikeVehicle` decides whether the photo has a car in it. All pure functions, easy to test without a model. |
+| `js/app.js` (badge picker) | The one exact-match filter that isn't a trait: type the make you can actually read on the car and the whole index narrows to it. Suggestions are drawn only from makes still possible given every other answer, the same "no dead ends" rule the traits follow. This is the closest thing to "brand recognition" in the app, and it works by trusting the player's eyes rather than pretending MobileNet can read a logo. |
 | `js/traits.js` | The thirty things to look for. Every trait is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec turned into something you can check by looking. `answersForBody` settles all six shape traits from the model's own guess. Traits that would empty the list, or that every remaining car shares, are withheld. |
 | `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. |
 | `js/match.js` | Builds the shortlist: body style first, then whether the car fits the character the photo read as, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |

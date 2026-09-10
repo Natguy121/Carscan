@@ -17,6 +17,8 @@ let filter = 'all';
 let lastResult = null;
 let traitAnswers = new Map();  // trait id -> true (has it) / false (doesn't)
 let traitsOpen = false;
+let selectedMake = null;   // the exact make, read off the badge by the player
+let makeQuery = '';        // what's typed in the badge box before a make is picked
 
 // ------------------------------------------------------------------ toasts
 
@@ -189,6 +191,8 @@ async function onIdentify() {
   const trusted = Boolean(body) && confidence >= 0.6;
   traitAnswers = trusted ? answersForBody(body) : new Map();
   traitsOpen = false;
+  selectedMake = null;
+  makeQuery = '';
   lastResult = { predictions, body, confidence, character, label: topLabel(predictions), embedding, learned };
   renderVerdict();
 }
@@ -205,6 +209,39 @@ function searchCars(query, limit) {
   return CARS
     .filter((c) => displayName(c).toLowerCase().includes(q) || c.country.toLowerCase().includes(q))
     .slice(0, limit);
+}
+
+/**
+ * Read the badge yourself. The model has no idea what a Toyota badge looks
+ * like — it only ever guesses a shape — so the exact make comes from the
+ * player's own eyes, not a computer-vision guess dressed up as one.
+ *
+ * Suggestions are drawn from whichever makes are still possible in `pool`, so
+ * it can never suggest a make that answers or a picked make have already ruled
+ * out, and it narrows the same way the traits do rather than filtering by name.
+ */
+function badgePicker(pool) {
+  if (selectedMake) {
+    return `
+      <div class="badge-picked">
+        <span class="trait-chip is-on">${esc(selectedMake)}</span>
+        <button class="btn btn-ghost btn-small" data-clear-make>Not that make</button>
+      </div>`;
+  }
+
+  const q = makeQuery.trim().toLowerCase();
+  const makes = [...new Set(pool.map((c) => c.make))].sort((a, b) => a.localeCompare(b));
+  const suggestions = q ? makes.filter((m) => m.toLowerCase().includes(q)).slice(0, 8) : [];
+
+  return `
+    <div class="badge-picker">
+      <input class="search" id="badge-search" type="text" inputmode="text"
+             placeholder="Read the badge? Type the make…" value="${esc(makeQuery)}" autocomplete="off">
+      ${suggestions.length ? `
+        <div class="trait-chips badge-suggestions">
+          ${suggestions.map((m) => `<button class="trait-chip" data-pick-make="${esc(m)}">${esc(m)}</button>`).join('')}
+        </div>` : ''}
+    </div>`;
 }
 
 /**
@@ -271,19 +308,20 @@ function renderVerdict(query = '') {
   // right car sits just outside the top few.
   const learnedCar = learned ? CARS_BY_ID.get(learned.carId) : null;
 
-  // Answers narrow the whole index, not just the shortlist — that is what finds
-  // a car the body-style guess would never have surfaced.
-  const narrowing = traitAnswers.size > 0;
-  const pool = narrowing ? CARS.filter((car) => matchesAnswers(car, traitAnswers)) : CARS;
+  // Answers and a read badge narrow the whole index, not just the shortlist —
+  // that is what finds a car the body-style guess would never have surfaced.
+  const fits = (car) => matchesAnswers(car, traitAnswers) && (!selectedMake || car.make === selectedMake);
+  const narrowing = traitAnswers.size > 0 || Boolean(selectedMake);
+  const pool = narrowing ? CARS.filter(fits) : CARS;
   const shortlistSize = narrowing ? 24 : (confidence >= 0.6 ? 8 : 12);
 
   let candidates;
   if (searching) {
-    candidates = searchCars(query, 20).filter((car) => matchesAnswers(car, traitAnswers));
+    candidates = searchCars(query, 20).filter(fits);
   } else {
     candidates = candidatesForBody(body, shortlistSize, { ...catchHistory(), character: character?.character }, pool);
     // A car you have taught it outranks any guess made from the shape alone.
-    if (learnedCar && matchesAnswers(learnedCar, traitAnswers)) {
+    if (learnedCar && fits(learnedCar)) {
       candidates = [learnedCar, ...candidates.filter((c) => c.id !== learnedCar.id)].slice(0, shortlistSize);
     }
   }
@@ -309,6 +347,7 @@ function renderVerdict(query = '') {
       <p class="muted">${intro}</p>
       <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
              value="${esc(query)}" autocomplete="off">
+      ${badgePicker(pool)}
       ${answerPanel(pool)}
       <div class="candidates">
         ${candidates.length
@@ -319,6 +358,10 @@ function renderVerdict(query = '') {
 
   if (searching) {
     const input = $('#verdict-search');
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  } else if (makeQuery) {
+    const input = $('#badge-search');
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   }
@@ -540,6 +583,17 @@ function wire() {
       return renderVerdict($('#verdict-search')?.value || '');
     }
 
+    const pickMake = t.closest('[data-pick-make]');
+    if (pickMake) {
+      selectedMake = pickMake.dataset.pickMake;
+      makeQuery = '';
+      return renderVerdict($('#verdict-search')?.value || '');
+    }
+    if (t.closest('[data-clear-make]')) {
+      selectedMake = null;
+      return renderVerdict($('#verdict-search')?.value || '');
+    }
+
     if (t.closest('[data-manual]')) return renderManualPicker();
 
     if (t.closest('[data-rescan]')) {
@@ -557,6 +611,10 @@ function wire() {
   document.addEventListener('input', (e) => {
     if (e.target.id === 'manual-search') renderManualPicker(e.target.value);
     if (e.target.id === 'verdict-search') renderVerdict(e.target.value);
+    if (e.target.id === 'badge-search') {
+      makeQuery = e.target.value;
+      renderVerdict($('#verdict-search')?.value || '');
+    }
   });
 
   // Click the backdrop or press Escape to dismiss.
