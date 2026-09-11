@@ -125,7 +125,7 @@ every entry unique, well formed, and using a real body style and rarity.
 | `js/app.js` (badge picker) | The one exact-match filter that isn't a trait: type the make you can actually read on the car and the whole index narrows to it. Suggestions are drawn only from makes still possible given every other answer, the same "no dead ends" rule the traits follow. This is the closest thing to "brand recognition" in the app, and it works by trusting the player's eyes rather than pretending MobileNet can read a logo. |
 | `js/traits.js` | The thirty things to look for. Every trait is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec turned into something you can check by looking. `answersForBody` settles all six shape traits from the model's own guess. Traits that would empty the list, or that every remaining car shares, are withheld. |
 | `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. |
-| `js/logos.js` | The same fingerprint trick as `memory.js`, filed under a make instead of a car, from a close-up photo of just the badge. See [Logo trainer](#logo-trainer) below. |
+| `js/logos.js` | The same fingerprint trick as `memory.js`, filed under a make instead of a car, from a close-up photo of just the badge. `loadSeedLogos` fetches `data/logos.seed.json` once per device on startup and imports it without ever touching what a player has taught themselves. See [Logo trainer](#logo-trainer) below. |
 | `js/match.js` | Builds the shortlist: body style first, then whether the car fits the character the photo read as, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
 | `js/cars.js` | The 898 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
@@ -162,11 +162,18 @@ the trainer with junk. It does **not** stop anyone who opens developer tools —
 that's a real limit of a password with no server behind it, not a bug — so
 never reuse a password you use anywhere else.
 
-**Training only affects this device.** Like everything else here, trained
-badges live in local storage, not a shared database. *Export trained set*
-downloads them as JSON; *Import* merges a file back in. That's how a trained
-set moves between devices, or how you'd hand one to someone else to bake into
-their own copy of the app.
+**Training only affects this device — unless you ship it.** Like everything
+else here, trained badges live in local storage, not a shared database.
+*Export trained set* downloads them as JSON; *Import* merges a file back in.
+That's how a trained set moves between devices, and it's also how the app can
+ship with badges already known: train some, export, and drop the file in as
+`data/logos.seed.json`. Every visitor's copy of the app fetches that file once
+(same-origin, no CDN, so it works wherever the site is hosted) and imports it
+automatically on first load — never overwriting anything a player has already
+taught themselves. This is also the answer to "can I just hand you photos to
+train it": nothing here can run a photo through MobileNet outside a real
+browser, so train in yours, export, and hand over the file instead of the
+photos — that file is what actually gets baked in.
 
 **How it's used.** A trained badge only ever appears as a suggestion chip —
 "Trained badge match: Toyota?" — next to the badge-typing box on a scan,

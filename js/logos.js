@@ -131,6 +131,33 @@ export function exportLogos() {
   return JSON.stringify({ samples: read() }, null, 0);
 }
 
+const SEED_URL = './data/logos.seed.json';
+const SEED_FLAG = 'carscan.logos.seed-loaded.v1';
+
+/**
+ * Load the badges shipped with the app itself — data/logos.seed.json, built by
+ * exporting a trained set from this same trainer and committing it to the
+ * repo, so every player starts with those badges known rather than each
+ * device training from nothing. Same-origin static file, not a CDN, so it
+ * works wherever the app is hosted with no extra network dependency.
+ *
+ * Runs once per device: a flag in localStorage remembers it happened, so
+ * re-loading the app doesn't keep re-importing the same samples, and it never
+ * touches anything a player has taught themselves.
+ */
+export async function loadSeedLogos() {
+  if (localStorage.getItem(SEED_FLAG)) return 0;
+  let added = 0;
+  try {
+    const res = await fetch(SEED_URL);
+    if (res.ok) added = importLogos(await res.text());
+  } catch {
+    /* no seed file yet, or offline on first load — nothing to import */
+  }
+  localStorage.setItem(SEED_FLAG, '1');
+  return added;
+}
+
 /** Merge in previously exported samples rather than replacing what's here. */
 export function importLogos(json) {
   const parsed = JSON.parse(json);

@@ -4,7 +4,7 @@ import { candidatesForBody } from './match.js';
 import { remember, recall, memoryStats, forgetAll } from './memory.js';
 import {
   hasPassword, setPassword, checkPassword, teachLogo, recallLogo,
-  logoStats, forgetLogos, exportLogos, importLogos,
+  logoStats, forgetLogos, exportLogos, importLogos, loadSeedLogos,
 } from './logos.js';
 import { TRAIT_GROUPS, TRAITS_BY_ID, matchesAnswers, answersForBody, usefulTraits } from './traits.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
@@ -854,6 +854,7 @@ function init() {
   renderScan();
   renderIndex();
   warmUp();
+  loadSeedLogos(); // badges shipped with the app itself, see data/logos.seed.json
 }
 
 init();

@@ -10,8 +10,10 @@ globalThis.localStorage = {
 
 const {
   hasPassword, setPassword, checkPassword, clearPassword,
-  teachLogo, recallLogo, logoStats, forgetLogos, exportLogos, importLogos,
+  teachLogo, recallLogo, logoStats, forgetLogos, exportLogos, importLogos, loadSeedLogos,
 } = await import('../js/logos.js');
+
+const clearSeedFlag = () => store.delete('carscan.logos.seed-loaded.v1');
 
 function fingerprint(seed, length = 32) {
   let x = seed * 9301 + 49297;
@@ -29,7 +31,7 @@ function nudge(vector, amount) {
   return out;
 }
 
-test.beforeEach(() => { forgetLogos(); clearPassword(); });
+test.beforeEach(() => { forgetLogos(); clearPassword(); clearSeedFlag(); });
 
 // --------------------------------------------------------------- password
 
@@ -162,4 +164,42 @@ test('malformed entries in an imported file are skipped, not crashed on', () => 
   }));
   assert.equal(added, 1, 'only the one entry with both a make and a fingerprint counts');
   assert.equal(logoStats().samples, 1);
+});
+
+// ------------------------------------------------------------------ seed
+
+test('the seed loads once and marks itself so it never re-imports', async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    text: async () => JSON.stringify({ samples: [{ make: 'Toyota', v: 'AAAA' }] }),
+  });
+  const first = await loadSeedLogos();
+  assert.equal(first, 1);
+  assert.equal(logoStats().samples, 1);
+
+  const second = await loadSeedLogos();
+  assert.equal(second, 0, 'a second load must not re-import the seed');
+  assert.equal(logoStats().samples, 1);
+});
+
+test('a missing or unreachable seed file is not an error', async () => {
+  clearSeedFlag();
+  globalThis.fetch = async () => ({ ok: false });
+  assert.equal(await loadSeedLogos(), 0);
+
+  clearSeedFlag();
+  globalThis.fetch = async () => { throw new Error('offline'); };
+  assert.equal(await loadSeedLogos(), 0);
+});
+
+test('the seed never overwrites badges the player already taught themselves', async () => {
+  teachLogo('Honda', fingerprint(9));
+  clearSeedFlag();
+  globalThis.fetch = async () => ({
+    ok: true,
+    text: async () => JSON.stringify({ samples: [{ make: 'Toyota', v: 'AAAA' }] }),
+  });
+  await loadSeedLogos();
+  assert.equal(logoStats().samples, 2);
+  assert.ok(logoStats().perMake.has('Honda'));
 });
