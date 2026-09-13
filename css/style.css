@@ -624,6 +624,22 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   cursor: pointer;
 }
 .candidate:hover { filter: brightness(1.15); }
+.candidate.is-guess {
+  position: relative;
+  padding-top: 1.5rem;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-2));
+}
+.guess-flag {
+  position: absolute;
+  top: .4rem;
+  left: .7rem;
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
 .candidate-art { color: rgba(255, 255, 255, .35); }
 .candidate-text { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
 .candidate-text strong { font-size: .88rem; }
@@ -708,46 +724,8 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 }
 .badge-picked .trait-chip { pointer-events: none; }
 
-/* ------------------------------------------------- narrow-it-down traits */
+/* ------------------------------------------------------- badge suggestions */
 
-.traits {
-  text-align: left;
-  margin: .7rem 0 .2rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--card) 60%, transparent);
-}
-.traits > summary {
-  cursor: pointer;
-  padding: .6rem .75rem;
-  font-size: .82rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .5rem;
-  list-style: none;
-}
-.traits > summary::-webkit-details-marker { display: none; }
-.traits > summary::after {
-  content: '▾';
-  color: var(--muted);
-  font-size: .7rem;
-  transition: transform .15s ease;
-}
-.traits[open] > summary::after { transform: rotate(180deg); }
-.trait-count {
-  font-family: var(--mono);
-  font-size: .7rem;
-  color: var(--accent);
-  margin-left: auto;
-}
-.trait-count.muted { color: var(--muted); }
-
-.trait-group { padding: 0 .75rem .55rem; }
-.trait-group-label {
-  font-family: var(--mono); font-size: .62rem; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--muted); margin: .35rem 0 .4rem;
-}
 .trait-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
 .trait-chip {
   font: inherit;
@@ -765,12 +743,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   border-color: var(--accent);
   color: var(--accent);
-}
-.trait-chip.is-off {
-  background: color-mix(in srgb, var(--muted) 14%, transparent);
-  border-color: color-mix(in srgb, var(--muted) 50%, transparent);
-  color: var(--muted);
-  text-decoration: line-through;
 }
 .btn-small { font-size: .74rem; padding: .35rem .8rem; margin: 0 .75rem .7rem; }
 

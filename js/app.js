@@ -8,7 +8,6 @@ import {
   hasPassword, setPassword, checkPassword, teachLogo, recallLogo,
   logoStats, forgetLogos, exportLogos, importLogos, loadSeedLogos,
 } from './logos.js';
-import { TRAIT_GROUPS, TRAITS_BY_ID, matchesAnswers, answersForBody, usefulTraits } from './traits.js';
 import { startCamera, stopCamera, captureFrame, captureFromFile, isRunning, CameraError } from './camera.js';
 import {
   getState, entryFor, isDiscovered, discoveredCount, completion, catchHistory,
@@ -21,8 +20,6 @@ const $ = (sel) => document.querySelector(sel);
 let capture = null;
 let filter = 'all';
 let lastResult = null;
-let traitAnswers = new Map();  // trait id -> true (has it) / false (doesn't)
-let traitsOpen = false;
 let selectedMake = null;   // the exact make, read off the badge by the player
 let makeQuery = '';        // what's typed in the badge box before a make is picked
 
@@ -208,12 +205,6 @@ async function onIdentify() {
   // scan happens to land close to the same framing — worth checking since it's
   // free, but it is not the app reading a logo out of an arbitrary photo.
   const logoMatch = embedding ? recallLogo(embedding) : null;
-  // Everything the shape already settles is answered from the model's own guess,
-  // but only when it was confident — a shaky guess auto-answered would quietly
-  // rule out the right car.
-  const trusted = Boolean(body) && confidence >= 0.6;
-  traitAnswers = trusted ? answersForBody(body) : new Map();
-  traitsOpen = false;
   selectedMake = null;
   makeQuery = '';
   lastResult = { predictions, body, confidence, character, label: topLabel(predictions), embedding, learned, logoMatch };
@@ -240,8 +231,7 @@ function searchCars(query, limit) {
  * player's own eyes, not a computer-vision guess dressed up as one.
  *
  * Suggestions are drawn from whichever makes are still possible in `pool`, so
- * it can never suggest a make that answers or a picked make have already ruled
- * out, and it narrows the same way the traits do rather than filtering by name.
+ * it never suggests a make a picked make has already ruled out.
  */
 function badgePicker(pool, logoMatch) {
   if (selectedMake) {
@@ -278,45 +268,6 @@ function badgePicker(pool, logoMatch) {
     </div>`;
 }
 
-/**
- * The thirty things, for when the player can see something the model can't.
- * Shape is already filled in from the guess; the rest is theirs to tick.
- */
-function answerPanel(pool) {
-  const given = [...traitAnswers].map(([id, yes]) => ({ trait: TRAITS_BY_ID.get(id), yes })).filter((a) => a.trait);
-  const offered = usefulTraits(pool, new Set(traitAnswers.keys()));
-
-  const groups = TRAIT_GROUPS
-    .map(([key, label]) => {
-      const chips = offered.filter((t) => t.group === key);
-      if (!chips.length) return '';
-      return `
-        <div class="trait-group">
-          <p class="trait-group-label">${esc(label)}</p>
-          <div class="trait-chips">
-            ${chips.map((t) => {
-              const answer = traitAnswers.get(t.id);
-              const state = answer === true ? ' is-on' : answer === false ? ' is-off' : '';
-              return `<button class="trait-chip${state}" data-trait="${esc(t.id)}"
-                        aria-pressed="${answer === true}">${answer === false ? '✕ ' : ''}${esc(t.label)}</button>`;
-            }).join('')}
-          </div>
-        </div>`;
-    })
-    .join('');
-
-  const summary = given.length
-    ? `<span class="trait-count">${CARS.length} → ${pool.length}</span>`
-    : '<span class="trait-count muted">30 things to check</span>';
-
-  return `
-    <details class="traits"${traitsOpen ? ' open' : ''}>
-      <summary>Narrow it down ${summary}</summary>
-      ${groups}
-      ${given.length ? '<button class="btn btn-ghost btn-small" data-clear-traits>Clear</button>' : ''}
-    </details>`;
-}
-
 function renderVerdict(query = '') {
   const { body, label, confidence, character, learned, logoMatch } = lastResult;
 
@@ -342,10 +293,10 @@ function renderVerdict(query = '') {
   // right car sits just outside the top few.
   const learnedCar = learned ? CARS_BY_ID.get(learned.carId) : null;
 
-  // Answers and a read badge narrow the whole index, not just the shortlist —
-  // that is what finds a car the body-style guess would never have surfaced.
-  const fits = (car) => matchesAnswers(car, traitAnswers) && (!selectedMake || car.make === selectedMake);
-  const narrowing = traitAnswers.size > 0 || Boolean(selectedMake);
+  // A read badge is the only manual narrowing left — the rest of the guess
+  // now leans entirely on what the model saw and what it has learned before.
+  const fits = (car) => !selectedMake || car.make === selectedMake;
+  const narrowing = Boolean(selectedMake);
   const pool = narrowing ? CARS.filter(fits) : CARS;
   const shortlistSize = narrowing ? 24 : (confidence >= 0.6 ? 8 : 12);
 
@@ -354,7 +305,9 @@ function renderVerdict(query = '') {
     candidates = searchCars(query, 20).filter(fits);
   } else {
     candidates = candidatesForBody(body, shortlistSize, { ...catchHistory(), character: character?.character }, pool);
-    // A car you have taught it outranks any guess made from the shape alone.
+    // A car you have taught it is the guess — it outranks anything read from
+    // the shape alone, since it is the one signal that has actually seen this
+    // exact car before.
     if (learnedCar && fits(learnedCar)) {
       candidates = [learnedCar, ...candidates.filter((c) => c.id !== learnedCar.id)].slice(0, shortlistSize);
     }
@@ -371,7 +324,7 @@ function renderVerdict(query = '') {
 
   const intro = learnedCar
     ? `You taught me this one — it looks like the ${esc(displayName(learnedCar))}. Tap it if that's right, or pick another.`
-    : `${esc(guess)} Pick the right one and I'll remember it, so next time I recognise it myself. Or narrow it down below.`;
+    : `${esc(guess)} Pick the right one and I'll remember it, so next time I recognise it myself.`;
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
@@ -382,10 +335,9 @@ function renderVerdict(query = '') {
       <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
              value="${esc(query)}" autocomplete="off">
       ${badgePicker(pool, logoMatch)}
-      ${answerPanel(pool)}
       <div class="candidates">
         ${candidates.length
-          ? candidates.map((car) => candidateRow({ car })).join('')
+          ? candidates.map((car) => candidateRow({ car, guess: !searching && learnedCar?.id === car.id })).join('')
           : '<p class="muted">Nothing matches that.</p>'}
       </div>
     </div>`);
@@ -780,23 +732,6 @@ function wire() {
     }
     const pick = t.closest('[data-pick]');
     if (pick) return logCar(pick.dataset.pick);
-
-    // The panel cycles a trait through yes → no → unanswered.
-    const trait = t.closest('[data-trait]');
-    if (trait) {
-      const id = trait.dataset.trait;
-      const current = traitAnswers.get(id);
-      if (current === undefined) traitAnswers.set(id, true);
-      else if (current === true) traitAnswers.set(id, false);
-      else traitAnswers.delete(id);
-      traitsOpen = true;
-      return renderVerdict($('#verdict-search')?.value || '');
-    }
-    if (t.closest('[data-clear-traits]')) {
-      traitAnswers.clear();
-      traitsOpen = true;
-      return renderVerdict($('#verdict-search')?.value || '');
-    }
 
     const pickMake = t.closest('[data-pick-make]');
     if (pickMake) {

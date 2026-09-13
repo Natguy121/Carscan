@@ -99,9 +99,10 @@ export function specSheet(car, entry, { showClose = true } = {}) {
 }
 
 /** A car the player can tap to confirm from a shortlist. */
-export function candidateRow({ car }) {
+export function candidateRow({ car, guess = false }) {
   return `
-    <button class="candidate" data-pick="${esc(car.id)}" data-rarity="${car.rarity}">
+    <button class="candidate${guess ? ' is-guess' : ''}" data-pick="${esc(car.id)}" data-rarity="${car.rarity}">
+      ${guess ? '<span class="guess-flag">Best guess</span>' : ''}
       <div class="candidate-art">${silhouette(car.body, { className: 'sil' })}</div>
       <div class="candidate-text">
         <strong>${esc(displayName(car))}</strong>
