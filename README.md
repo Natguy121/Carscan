@@ -41,9 +41,11 @@ G80 M3 are separate catches.
    typing the make you can actually see on the car cuts the index straight down
    to it: 898 → 17 for Toyota's SUVs alone. It only ever suggests makes still
    possible given everything else you've told it, never one already ruled out.
-   If badges have been taught in the [Logo trainer](#logo-trainer), a trained
-   match shows up here too, as a "Trained badge match" chip to confirm — a hint,
-   never an autofill.
+   If badges have been taught in the [Logo trainer](#logo-trainer), a confident
+   match is used the same way — the shortlist narrows to that make on its own,
+   labelled "Trained badge match" so it's never a mystery why, with one tap on
+   "Not that make" to undo it. It's still only ever a make, never the exact
+   car, so the final pick is always yours.
 
    **Whatever you tap, it learns — and then it guesses.** Confirming a car
    files that photo's fingerprint under it, and the next time you scan
@@ -183,15 +185,17 @@ train it": nothing here can run a photo through MobileNet outside a real
 browser, so train in yours, export, and hand over the file instead of the
 photos — that file is what actually gets baked in.
 
-**How it's used.** A trained badge only ever appears as a suggestion chip —
-"Trained badge match: Toyota?" — next to the badge-typing box on a scan,
-never an automatic pick. It also only fires when a scan happens to be framed
-similarly to the training photos, since the fingerprint is sensitive to what's
-actually in the picture: a close-up of a badge and a photo of a whole car
-rarely land close together even when it's the same make. That's a real
-limitation of doing this with a general-purpose model rather than one trained
-specifically to find logos in a wider scene — worth having since it's free
-when it works, but not a substitute for reading the badge yourself.
+**How it's used.** A confident trained badge narrows the shortlist to that
+make automatically — labelled "Trained badge match: Toyota" next to the
+badge-typing box, with "Not that make" to undo it in one tap. It still only
+ever picks a make, never the exact car or an automatic catch. It also only
+fires when a scan happens to be framed similarly to the training photos, since
+the fingerprint is sensitive to what's actually in the picture: a close-up of
+a badge and a photo of a whole car rarely land close together even when it's
+the same make. That's a real limitation of doing this with a general-purpose
+model rather than one trained specifically to find logos in a wider scene —
+worth using since it's free when it works, but not a substitute for reading
+the badge yourself when it doesn't fire.
 
 ## Adding cars
 

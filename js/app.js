@@ -207,7 +207,11 @@ async function onIdentify() {
   // scan happens to land close to the same framing — worth checking since it's
   // free, but it is not the app reading a logo out of an arbitrary photo.
   const logoMatch = embedding ? recallLogo(embedding) : null;
-  selectedMake = null;
+  // A confident trained badge is used, not just offered — it narrows the
+  // shortlist to that make automatically. It still only ever picks a make,
+  // never the exact car, so the final tap to confirm is always yours; "Not
+  // that make" below undoes it in one tap if the badge was misread.
+  selectedMake = logoMatch && MAKES.includes(logoMatch.make) ? logoMatch.make : null;
   makeQuery = '';
   lastResult = { predictions, body, confidence, character, label: topLabel(predictions), embedding, learned, logoMatch };
   renderVerdict();
@@ -237,8 +241,12 @@ function searchCars(query, limit) {
  */
 function badgePicker(pool, logoMatch) {
   if (selectedMake) {
+    // Distinguish "the trained badge did this" from "you typed this" — the
+    // player should never wonder why a make is already filled in.
+    const fromLogo = logoMatch && logoMatch.make === selectedMake;
     return `
       <div class="badge-picked">
+        ${fromLogo ? '<span class="muted small">Trained badge match:</span>' : ''}
         <span class="trait-chip is-on">${esc(selectedMake)}</span>
         <button class="btn btn-ghost btn-small" data-clear-make>Not that make</button>
       </div>`;
@@ -248,19 +256,8 @@ function badgePicker(pool, logoMatch) {
   const makes = [...new Set(pool.map((c) => c.make))].sort((a, b) => a.localeCompare(b));
   const suggestions = q ? makes.filter((m) => m.toLowerCase().includes(q)).slice(0, 8) : [];
 
-  // A trained-logo guess, offered as a question, never applied on its own —
-  // it's only ever confident when a scan happens to frame the badge the way
-  // the training photos did, so it's a hint worth a tap, not a claim.
-  const logoHint = logoMatch && makes.includes(logoMatch.make)
-    ? `<div class="badge-hint">
-         <span class="muted small">Trained badge match:</span>
-         <button class="trait-chip" data-pick-make="${esc(logoMatch.make)}">${esc(logoMatch.make)}?</button>
-       </div>`
-    : '';
-
   return `
     <div class="badge-picker">
-      ${logoHint}
       <input class="search" id="badge-search" type="text" inputmode="text"
              placeholder="Read the badge? Type the make…" value="${esc(makeQuery)}" autocomplete="off">
       ${suggestions.length ? `
@@ -324,9 +321,12 @@ function renderVerdict(query = '') {
     ? `Looks like ${flavour ? `a ${flavour}${BODY_LABEL[body].replace(/^an? /, '')}` : BODY_LABEL[body]}.${hedge}`
     : 'Body style unclear.';
 
+  const badgeNote = selectedMake && logoMatch?.make === selectedMake
+    ? ` The badge reads ${esc(selectedMake)}, so I've narrowed it to just that.`
+    : '';
   const intro = learnedCar
     ? `You taught me this one — it looks like the ${esc(displayName(learnedCar))}. Tap it if that's right, or pick another.`
-    : `${esc(guess)} Pick the right one and I'll remember it, so next time I recognise it myself.`;
+    : `${esc(guess)}${badgeNote} Pick the right one and I'll remember it, so next time I recognise it myself.`;
 
   openOverlay('result', `
     <button class="sheet-close" data-close aria-label="Close">✕</button>
