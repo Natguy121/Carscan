@@ -803,7 +803,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .blurb { font-size: .87rem; color: #c3cedb; line-height: 1.6; }
 
 .caught {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem;
   background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 10px; padding: .7rem; margin: .9rem 0;
 }

@@ -78,7 +78,6 @@ export function specSheet(car, entry, { showClose = true } = {}) {
     ? `<div class="caught">
          <div><span class="muted small">First caught</span><strong>${formatDate(entry.firstSeen)}</strong></div>
          <div><span class="muted small">Sightings</span><strong>${entry.count}</strong></div>
-         <div><span class="muted small">Colours seen</span><strong>${entry.colors?.length ? esc(entry.colors.join(', ')) : '—'}</strong></div>
        </div>`
     : `<p class="undiscovered-note">Not yet in your index. Scan one to unlock its full specification.</p>`;
 

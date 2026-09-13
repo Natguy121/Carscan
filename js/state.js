@@ -118,7 +118,7 @@ export function levelInfo(xp = state.xp) {
  * Log a confirmed catch.
  * @returns {{isNew:boolean, xp:number, breakdown:{label:string,value:number}[], levelUp:number|null, unlocked:object[]}}
  */
-export function recordCatch(carId, { photo = null, color = null } = {}) {
+export function recordCatch(carId, { photo = null } = {}) {
   const car = CARS_BY_ID.get(carId);
   if (!car) throw new Error(`unknown car ${carId}`);
 
@@ -139,10 +139,9 @@ export function recordCatch(carId, { photo = null, color = null } = {}) {
   }
 
   const now = Date.now();
-  const entry = existing || { count: 0, firstSeen: now, photos: [], colors: [] };
+  const entry = existing || { count: 0, firstSeen: now, photos: [] };
   entry.count += 1;
   entry.lastSeen = now;
-  if (color && !entry.colors.includes(color)) entry.colors.push(color);
   // The first photo you took of a car is the one the Cardex keeps.
   if (photo && !entry.photos.length) entry.photos = [photo];
   state.entries[carId] = entry;

@@ -20,7 +20,7 @@ G80 M3 are separate catches.
 1. **Take one photo.** Stand back, fit the whole car in frame, tap the shutter.
 2. **Identify.** A small recognition model runs right there in your browser —
    no internet round trip — and guesses the car's body style (SUV, pickup,
-   sedan…) and reads its colour off the photo.
+   sedan…).
 3. **Confirm — and teach it.** You get a shortlist of cars matching that body
    style and tap the right one — or type in the search box to find any of the
    898. The shortlist is ordered by what you're most likely to be looking at:
@@ -57,8 +57,7 @@ G80 M3 are separate catches.
    recognises it on its own — "Recognised from memory" — and puts that car at the
    top. The more you play, the more it knows the cars on *your* street.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo
-   of it, the colour you caught it in, and the date. Rarer cars are worth more
-   XP.
+   of it, and the date. Rarer cars are worth more XP.
 
 A photo the model can't find a car in at all — a steep angle from above, the car
 mostly hidden behind something, bad light — gets a **"Couldn't tell if that's a
@@ -129,7 +128,7 @@ every entry unique, well formed, and using a real body style and rarity.
 | `js/match.js` | Builds the shortlist: body style first, then whether the car fits the character the photo read as, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
 | `js/cars.js` | The 898 cars and their specifications. |
 | `js/state.js` | Save file: entries, photos, XP, achievements. Sheds photos rather than progress if storage fills. |
-| `js/camera.js` | Capture, downscaling, and the dominant-colour read. |
+| `js/camera.js` | Camera access, capture, and downscaling. |
 
 MobileNet knows 1,000 general ImageNet categories — "pickup truck", "sports
 car", "minivan" — never an exact make and model, which no free, on-device model

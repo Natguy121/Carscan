@@ -78,7 +78,6 @@ function packageCapture(source, sourceW, sourceH) {
     base64: dataUrl.slice(dataUrl.indexOf(',') + 1),
     preview: dataUrl,
     thumb: thumbCanvas.toDataURL('image/jpeg', 0.6),
-    color: dominantColor(full),
   };
 }
 
@@ -95,66 +94,4 @@ export async function captureFromFile(file) {
   const result = packageCapture(bitmap, bitmap.width, bitmap.height);
   bitmap.close?.();
   return result;
-}
-
-const HUES = [
-  [15, 'Red'],
-  [45, 'Orange'],
-  [65, 'Yellow'],
-  [160, 'Green'],
-  [200, 'Teal'],
-  [250, 'Blue'],
-  [290, 'Purple'],
-  [335, 'Pink'],
-  [360, 'Red'],
-];
-
-/**
- * Colour of the car, read from the middle of the frame where the subject is.
- * Purely descriptive — it is recorded on the Cardex entry, not used to identify.
- */
-function dominantColor(canvas) {
-  const ctx = canvas.getContext('2d');
-  const bx = Math.round(canvas.width * 0.2);
-  const by = Math.round(canvas.height * 0.25);
-  const bw = Math.max(1, Math.round(canvas.width * 0.6));
-  const bh = Math.max(1, Math.round(canvas.height * 0.5));
-  const { data } = ctx.getImageData(bx, by, bw, bh);
-
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let n = 0;
-  for (let i = 0; i < data.length; i += 16) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-    n++;
-  }
-  if (!n) return null;
-  r /= n;
-  g /= n;
-  b /= n;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const lightness = max / 255;
-  const sat = max === 0 ? 0 : (max - min) / max;
-
-  if (sat < 0.18) {
-    if (lightness > 0.82) return 'White';
-    if (lightness > 0.58) return 'Silver';
-    if (lightness > 0.3) return 'Grey';
-    return 'Black';
-  }
-
-  let hue;
-  if (max === r) hue = ((g - b) / (max - min)) * 60;
-  else if (max === g) hue = (2 + (b - r) / (max - min)) * 60;
-  else hue = (4 + (r - g) / (max - min)) * 60;
-  if (hue < 0) hue += 360;
-
-  const name = HUES.find(([limit]) => hue <= limit)?.[1] || 'Red';
-  if (name === 'Orange' && lightness < 0.45) return 'Brown';
-  return name;
 }

@@ -364,8 +364,8 @@ function renderVerdict(query = '') {
   const CHARACTER_WORD = { sporty: 'sporty', workhorse: 'hard-working', family: 'family-sized' };
   const flavour = character ? `${CHARACTER_WORD[character.character]} ` : '';
   const guess = body
-    ? `Looks like ${flavour ? `a ${flavour}${BODY_LABEL[body].replace(/^an? /, '')}` : BODY_LABEL[body]}${capture.color ? `, ${capture.color.toLowerCase()}` : ''}.${hedge}`
-    : (capture.color ? `A ${capture.color.toLowerCase()} car — body style unclear.` : 'Body style unclear.');
+    ? `Looks like ${flavour ? `a ${flavour}${BODY_LABEL[body].replace(/^an? /, '')}` : BODY_LABEL[body]}.${hedge}`
+    : 'Body style unclear.';
 
   const intro = learnedCar
     ? `You taught me this one — it looks like the ${esc(displayName(learnedCar))}. Tap it if that's right, or pick another.`
@@ -426,10 +426,7 @@ function logCar(carId) {
   const car = CARS_BY_ID.get(carId);
   if (!car) return;
 
-  const result = recordCatch(carId, {
-    photo: capture?.thumb || null,
-    color: capture?.color || null,
-  });
+  const result = recordCatch(carId, { photo: capture?.thumb || null });
 
   // Confirming the car is the training step: file this photo's fingerprint
   // under it so the next one like it is recognised without asking.
