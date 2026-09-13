@@ -154,6 +154,14 @@ photos yourself, on-device, the same embedding trick `memory.js` already uses
 for whole cars, just filed under a make instead of a car and trained from a
 close-up of just the badge rather than the whole vehicle.
 
+**Photos, many at once.** Once unlocked, pick a make, then either tap
+*Take a photo* for a live camera view with a shutter — teaching one loops
+straight back into the viewfinder for the next shot, so several photos of the
+same badge from different angles is a burst, not a menu you re-enter every
+time — or *Upload photos* and select a whole batch from your gallery at once,
+which teaches every file in it under the make you picked. More photos of the
+same badge, not fancier ones, is what actually makes a badge recognisable.
+
 **The password.** First time you open it, you set one. There's no server, so
 it's checked against a SHA-256 hash kept in this browser's own local storage —
 never the plaintext, and nothing sent anywhere. Be clear about what this

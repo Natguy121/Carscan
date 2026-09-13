@@ -34,6 +34,8 @@ let trainerCapture = null; // { preview, thumb } for the badge photo being taugh
 let trainerMake = '';
 let trainerNote = '';
 let trainerError = '';
+let trainerCameraOn = false;
+let trainerFromCamera = false; // whether the pending capture came from the shutter, not upload
 
 // ------------------------------------------------------------------ toasts
 
@@ -517,6 +519,27 @@ function trainerLockedMarkup() {
     </div>`;
 }
 
+/** The camera/upload area: live viewfinder, a captured photo, or the two choices. */
+function trainerCameraBlock() {
+  if (trainerCapture) {
+    return `
+      <div class="trainer-shot"><img src="${esc(trainerCapture.preview)}" alt="The badge photo"></div>
+      <button class="btn btn-ghost btn-small" data-trainer-retake>${trainerFromCamera ? 'Retake' : 'Discard'}</button>`;
+  }
+  if (trainerCameraOn) {
+    return `
+      <div class="trainer-stage">
+        <video id="trainer-cam" autoplay playsinline muted></video>
+      </div>
+      <button class="shutter" data-trainer-shutter aria-label="Take the photo"><span></span></button>`;
+  }
+  return `
+    <div class="trainer-choices">
+      <button class="btn btn-ghost" data-trainer-start-cam>Take a photo</button>
+      <button class="btn btn-ghost" data-trainer-upload>Upload photos</button>
+    </div>`;
+}
+
 function trainerUnlockedMarkup() {
   const { samples, makes } = logoStats();
   return `
@@ -525,17 +548,16 @@ function trainerUnlockedMarkup() {
       <p class="verdict-kicker">Logo trainer</p>
       <h2>Teach a badge</h2>
       <p class="muted">${samples} photo${samples === 1 ? '' : 's'} learned across ${makes} make${makes === 1 ? '' : 's'}.
-        Take a close, well-lit photo of just the badge — no need for the rest of the car.</p>
+        Take a close, well-lit photo of just the badge — no need for the rest of the car. Snap several
+        of the same badge from different angles and distances, or upload a batch at once — more photos
+        of the same badge is what actually makes it recognise that logo.</p>
 
       <select class="search" id="trainer-make">
         <option value="">Which make is this?</option>
         ${MAKES.map((m) => `<option value="${esc(m)}"${m === trainerMake ? ' selected' : ''}>${esc(m)}</option>`).join('')}
       </select>
 
-      ${trainerCapture
-        ? `<div class="trainer-shot"><img src="${esc(trainerCapture.preview)}" alt="The badge photo"></div>
-           <button class="btn btn-ghost btn-small" data-trainer-retake>Retake</button>`
-        : `<button class="btn btn-ghost" data-trainer-upload>Upload a badge photo</button>`}
+      ${trainerCameraBlock()}
 
       ${trainerNote ? `<p class="taught">${esc(trainerNote)}</p>` : ''}
 
@@ -589,13 +611,64 @@ async function onTrainerUnlock() {
   renderTrainer();
 }
 
-async function onTrainerFile(file) {
+/** Release the camera hardware whenever the trainer's viewfinder is left open. */
+function stopTrainerCamera() {
+  if (trainerCameraOn) stopCamera();
+  trainerCameraOn = false;
+}
+
+async function onTrainerStartCam() {
+  trainerCameraOn = true;
+  renderTrainer(); // puts the <video> element in the DOM before starting the stream
   try {
-    trainerCapture = await captureFromFile(file);
-    trainerNote = '';
+    await startCamera($('#trainer-cam'));
   } catch (err) {
-    toast(err.message, 'error');
+    trainerCameraOn = false;
+    trainerNote = err instanceof CameraError ? err.message : 'Could not start the camera.';
+    renderTrainer();
   }
+}
+
+function onTrainerShutter() {
+  try {
+    trainerCapture = captureFrame($('#trainer-cam'));
+  } catch (err) {
+    return toast(err.message, 'error');
+  }
+  stopCamera();
+  trainerCameraOn = false;
+  trainerFromCamera = true;
+  trainerNote = '';
+  renderTrainer();
+}
+
+/** One or many badge photos at once — a whole gallery selection teaches the
+ * same make in one go, since that's the realistic way to hand over "lots of
+ * photos": picked together, not one file-picker trip per photo. */
+async function onTrainerFiles(files) {
+  if (!trainerMake) {
+    trainerNote = 'Pick a make first.';
+    return renderTrainer();
+  }
+  let taught = 0;
+  for (const file of files) {
+    try {
+      const cap = await captureFromFile(file);
+      const img = await loadImage(cap.preview);
+      const embedding = await embedImage(img);
+      if (embedding) {
+        teachLogo(trainerMake, embedding);
+        taught += 1;
+      }
+    } catch {
+      /* one bad file in a batch shouldn't stop the rest */
+    }
+  }
+  const count = logoStats().perMake.get(trainerMake) || 0;
+  trainerNote = taught
+    ? `Learned ${taught} more photo${taught === 1 ? '' : 's'} of ${trainerMake} (${count} total).`
+    : "Couldn't read any of those photos — try again.";
+  trainerFromCamera = false;
   renderTrainer();
 }
 
@@ -611,6 +684,10 @@ async function onTrainerTeach() {
   const count = logoStats().perMake.get(trainerMake) || 0;
   trainerNote = `Learned ${trainerMake} (${count} photo${count === 1 ? '' : 's'} now).`;
   trainerCapture = null;
+  // Taking photos one at a time with the camera should feel like a burst, not
+  // a menu you re-enter after every shot — jump straight back into the
+  // viewfinder for the next one. A batch upload has no such loop to rejoin.
+  if (trainerFromCamera) return onTrainerStartCam();
   renderTrainer();
 }
 
@@ -679,7 +756,7 @@ function wire() {
 
   $('#btn-logo-trainer').addEventListener('click', openTrainer);
   $('#logo-file-input').addEventListener('change', async (e) => {
-    if (e.target.files[0]) await onTrainerFile(e.target.files[0]);
+    if (e.target.files.length) await onTrainerFiles(e.target.files);
     e.target.value = '';
   });
   $('#logo-import-input').addEventListener('change', async (e) => {
@@ -721,6 +798,7 @@ function wire() {
     const t = e.target;
 
     if (t.closest('[data-close]')) {
+      stopTrainerCamera();
       closeOverlay('result');
       closeOverlay('detail');
       return;
@@ -760,8 +838,18 @@ function wire() {
 
     if (t.closest('[data-trainer-setup]')) return onTrainerSetup();
     if (t.closest('[data-trainer-unlock]')) return onTrainerUnlock();
-    if (t.closest('[data-trainer-upload]')) return $('#logo-file-input').click();
-    if (t.closest('[data-trainer-retake]')) { trainerCapture = null; return renderTrainer(); }
+    if (t.closest('[data-trainer-start-cam]')) return onTrainerStartCam();
+    if (t.closest('[data-trainer-shutter]')) return onTrainerShutter();
+    if (t.closest('[data-trainer-upload]')) {
+      if (!trainerMake) { trainerNote = 'Pick a make first.'; return renderTrainer(); }
+      return $('#logo-file-input').click();
+    }
+    if (t.closest('[data-trainer-retake]')) {
+      trainerCapture = null;
+      // The camera loop resumes the viewfinder; a discarded upload just goes
+      // back to the choice of camera or gallery.
+      return trainerFromCamera ? onTrainerStartCam() : renderTrainer();
+    }
     if (t.closest('[data-trainer-teach]')) return onTrainerTeach();
     if (t.closest('[data-trainer-export]')) return onTrainerExport();
     if (t.closest('[data-trainer-import]')) return $('#logo-import-input').click();
@@ -771,6 +859,7 @@ function wire() {
       return renderTrainer();
     }
     if (t.closest('[data-trainer-lock]')) {
+      stopTrainerCamera();
       trainerUnlocked = false;
       trainerCapture = null;
       trainerNote = '';
@@ -795,11 +884,11 @@ function wire() {
   // Click the backdrop or press Escape to dismiss.
   ['result', 'detail'].forEach((id) => {
     $(`#${id}-overlay`).addEventListener('click', (e) => {
-      if (e.target.id === `${id}-overlay`) closeOverlay(id);
+      if (e.target.id === `${id}-overlay`) { stopTrainerCamera(); closeOverlay(id); }
     });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeOverlay('result'); closeOverlay('detail'); }
+    if (e.key === 'Escape') { stopTrainerCamera(); closeOverlay('result'); closeOverlay('detail'); }
   });
 
   document.addEventListener('visibilitychange', () => {
