@@ -145,3 +145,42 @@ export function forgetAll() {
     /* nothing worth reporting — the memory is a nicety, not the save file */
   }
 }
+
+export function exportMemory() {
+  return JSON.stringify({ samples: read() }, null, 0);
+}
+
+/** Merge in previously exported samples rather than replacing what's here. */
+export function importMemory(json) {
+  const parsed = JSON.parse(json);
+  const incoming = Array.isArray(parsed.samples) ? parsed.samples : [];
+  const valid = incoming.filter((s) => s && s.carId && s.v);
+  const samples = read().concat(valid);
+  while (samples.length > MAX_SAMPLES) evict(samples);
+  return write(samples) ? valid.length : 0;
+}
+
+const SEED_URL = './data/memory.seed.json';
+const SEED_FLAG = 'carscan.memory.seed-loaded.v1';
+
+/**
+ * Load the shapes shipped with the app itself — data/memory.seed.json, built
+ * by exporting a trained memory from this same app and committing it to the
+ * repo, so a new player starts with common cars already recognised instead of
+ * every device learning from nothing. Same-origin static file, not a CDN.
+ *
+ * Runs once per device: a flag in localStorage stops it from re-importing on
+ * every load, and it never touches anything a player has caught themselves.
+ */
+export async function loadSeedMemory() {
+  if (localStorage.getItem(SEED_FLAG)) return 0;
+  let added = 0;
+  try {
+    const res = await fetch(SEED_URL);
+    if (res.ok) added = importMemory(await res.text());
+  } catch {
+    /* no seed file yet, or offline on first load — nothing to import */
+  }
+  localStorage.setItem(SEED_FLAG, '1');
+  return added;
+}

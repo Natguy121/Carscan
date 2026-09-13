@@ -55,7 +55,11 @@ G80 M3 are separate catches.
    **Whatever you tap, it learns.** Confirming a car files that photo's
    fingerprint under it, and the next time you scan something similar the app
    recognises it on its own — "Recognised from memory" — and puts that car at the
-   top. The more you play, the more it knows the cars on *your* street.
+   top. The more you play, the more it knows the cars on *your* street. The
+   Garage has *Export learned cars* / *Import learned cars* so this can move
+   between devices, or be baked into `data/memory.seed.json` — see
+   [Logo trainer](#logo-trainer) for how the same mechanism works for badges;
+   this is its plainer sibling, no password, since it's just your own play data.
 4. **Collect.** The car joins your Cardex with its full spec sheet, your photo
    of it, and the date. Rarer cars are worth more XP.
 
@@ -112,9 +116,12 @@ confidence; telling a car photo from a non-car one), the shortlist ranking
 outranking commonness), the character read (a fast SUV read apart from a
 school-run one, a split read left uncalled, and reordering that never drops a
 car), the thirty traits (each splits the index, the shape fills itself in from
-the guess, dead ends are never offered), the learned memory (recognising a car from a similar photo, refusing to match an
-unrelated one, staying inside its storage budget), and database integrity —
-every entry unique, well formed, and using a real body style and rarity.
+the guess, dead ends are never offered), the learned memory and the logo
+trainer (recognising a photo it has seen before, refusing to match an
+unrelated one, staying inside its storage budget, and export/import/seed
+loading never overwriting what a player learned themselves), and database
+integrity — every entry unique, well formed, and using a real body style and
+rarity.
 
 ## How identification works
 
@@ -123,7 +130,7 @@ every entry unique, well formed, and using a real body style and rarity.
 | `js/classify.js` | Loads MobileNet via TensorFlow.js on first use and classifies the photo. `inferBody` adds each vehicle class's probability to its body style and picks the heaviest, returning a confidence alongside it, so several weak agreeing guesses beat one stronger disagreeing one. `inferCharacter` reads sporty / hard-working / family-sized off the same predictions, and returns nothing at all when the read is split. `looksLikeVehicle` decides whether the photo has a car in it. All pure functions, easy to test without a model. |
 | `js/app.js` (badge picker) | The one exact-match filter that isn't a trait: type the make you can actually read on the car and the whole index narrows to it. Suggestions are drawn only from makes still possible given every other answer, the same "no dead ends" rule the traits follow. This is the closest thing to "brand recognition" in the app, and it works by trusting the player's eyes rather than pretending MobileNet can read a logo. |
 | `js/traits.js` | The thirty things to look for. Every trait is derived from a field already in the database — `country`, `body`, `seats`, the parsed `engine` string, the first year in `years` — so a trait is never a new claim about a car, just a verified spec turned into something you can check by looking. `answersForBody` settles all six shape traits from the model's own guess. Traits that would empty the list, or that every remaining car shares, are withheld. |
-| `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. |
+| `js/memory.js` | The part that learns. MobileNet's second-to-last layer turns a photo into a fingerprint where two photos of the same car land close together; confirming a car files that fingerprint under it, and a later scan is matched against them by cosine similarity. Quantised to a byte per number and capped at 240 samples, evicting from whichever car has the most so a daily commuter can't crowd out a one-off. `loadSeedMemory` fetches `data/memory.seed.json` once per device on startup and imports it without ever touching what a player has caught themselves — the same seeding trick as `logos.js`, minus the password, since this is just ordinary play data rather than a shared brand asset. |
 | `js/logos.js` | The same fingerprint trick as `memory.js`, filed under a make instead of a car, from a close-up photo of just the badge. `loadSeedLogos` fetches `data/logos.seed.json` once per device on startup and imports it without ever touching what a player has taught themselves. See [Logo trainer](#logo-trainer) below. |
 | `js/match.js` | Builds the shortlist: body style first, then whether the car fits the character the photo read as, then cars you have already caught, then makes you catch often, then commonness. Your own scan record is real evidence about what is parked near you. A car recognised from memory is pinned above all of it. |
 | `js/cars.js` | The 898 cars and their specifications. |
@@ -196,8 +203,11 @@ numbers on a spec sheet are true.
 
 ## Privacy
 
-Nothing leaves your device. Recognition runs locally, and progress, photos,
-the learned fingerprints, and anything taught in the logo trainer (including
-its password hash) live in local storage on your device only. There is no
-server and no account. Resetting progress in the Garage also wipes what it has
-learned; the logo trainer's own *Forget all* clears just the trained badges.
+Nothing leaves your device on its own. Recognition runs locally, and progress,
+photos, the learned fingerprints, and anything taught in the logo trainer
+(including its password hash) live in local storage on your device only. There
+is no server and no account. The only way anything leaves is you choosing
+*Export* — a JSON file you save and hand over yourself — and the only way
+anything arrives is *Import*, or the app's own seed files loading once on
+first run. Resetting progress in the Garage also wipes what it has learned;
+the logo trainer's own *Forget all* clears just the trained badges.

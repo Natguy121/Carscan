@@ -1,7 +1,9 @@
 import { CARS, CARS_BY_ID, RARITY, displayName } from './cars.js';
 import { classifyImage, embedImage, looksLikeVehicle, inferBody, inferCharacter, topLabel, ClassifyError, warmUp } from './classify.js';
 import { candidatesForBody } from './match.js';
-import { remember, recall, memoryStats, forgetAll } from './memory.js';
+import {
+  remember, recall, memoryStats, forgetAll, exportMemory, importMemory, loadSeedMemory,
+} from './memory.js';
 import {
   hasPassword, setPassword, checkPassword, teachLogo, recallLogo,
   logoStats, forgetLogos, exportLogos, importLogos, loadSeedLogos,
@@ -660,14 +662,18 @@ async function onTrainerTeach() {
   renderTrainer();
 }
 
-function onTrainerExport() {
-  const blob = new Blob([exportLogos()], { type: 'application/json' });
+function downloadJson(content, filename) {
+  const blob = new Blob([content], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'carscan-logos.json';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function onTrainerExport() {
+  downloadJson(exportLogos(), 'carscan-logos.json');
 }
 
 async function onTrainerImportFile(file) {
@@ -678,6 +684,20 @@ async function onTrainerImportFile(file) {
     trainerNote = "That file didn't look like a trained set.";
   }
   renderTrainer();
+}
+
+function onMemoryExport() {
+  downloadJson(exportMemory(), 'carscan-memory.json');
+}
+
+async function onMemoryImportFile(file) {
+  try {
+    const added = importMemory(await file.text());
+    toast(`Learned ${added} more photo${added === 1 ? '' : 's'}.`, 'success');
+  } catch {
+    toast("That file didn't look like a learned set.", 'error');
+  }
+  renderGarage();
 }
 
 // -------------------------------------------------------------- car detail
@@ -712,6 +732,13 @@ function wire() {
   });
   $('#logo-import-input').addEventListener('change', async (e) => {
     if (e.target.files[0]) await onTrainerImportFile(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  $('#btn-memory-export').addEventListener('click', onMemoryExport);
+  $('#btn-memory-import').addEventListener('click', () => $('#memory-import-input').click());
+  $('#memory-import-input').addEventListener('change', async (e) => {
+    if (e.target.files[0]) await onMemoryImportFile(e.target.files[0]);
     e.target.value = '';
   });
 
@@ -852,6 +879,10 @@ function init() {
   renderIndex();
   warmUp();
   loadSeedLogos(); // badges shipped with the app itself, see data/logos.seed.json
+  // Shapes shipped with the app itself, see data/memory.seed.json. The scan
+  // note already rendered above with whatever was learned before this
+  // resolves, so refresh it once new samples land.
+  loadSeedMemory().then((added) => { if (added) renderScan(); });
 }
 
 init();

@@ -53,6 +53,7 @@
       <input type="file" id="file-input" accept="image/*" hidden>
       <input type="file" id="logo-file-input" accept="image/*" hidden>
       <input type="file" id="logo-import-input" accept="application/json" hidden>
+      <input type="file" id="memory-import-input" accept="application/json" hidden>
 
       <button class="btn btn-primary btn-identify" id="btn-identify" disabled>
         Identify car
@@ -89,10 +90,13 @@
         <p class="muted small">
           Recognition runs right in this browser using a small on-device model — no account, no
           API key, and no data ever leaves your device. It can spot a car's <strong>body style</strong>
-          (SUV, sedan, pickup…) and colour, but not an exact make and model, so you confirm the
-          exact car from a shortlist after every scan.
+          (SUV, sedan, pickup…), but not an exact make and model, so you confirm the exact car from
+          a shortlist after every scan. Whatever you confirm, it remembers, so it recognises that
+          exact car itself next time.
         </p>
         <div class="settings-actions">
+          <button class="btn btn-ghost" id="btn-memory-export">Export learned cars</button>
+          <button class="btn btn-ghost" id="btn-memory-import">Import learned cars</button>
           <button class="btn btn-danger" id="btn-reset">Reset all progress</button>
         </div>
         <button class="link-btn" id="btn-logo-trainer">Logo trainer</button>

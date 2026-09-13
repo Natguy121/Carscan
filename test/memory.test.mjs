@@ -9,8 +9,12 @@ globalThis.localStorage = {
   removeItem: (k) => store.delete(k),
 };
 
-const { remember, recall, forgetAll, memoryStats, toUnit, similarity, pack, unpack } =
-  await import('../js/memory.js');
+const {
+  remember, recall, forgetAll, memoryStats, toUnit, similarity, pack, unpack,
+  exportMemory, importMemory, loadSeedMemory,
+} = await import('../js/memory.js');
+
+const clearSeedFlag = () => store.delete('carscan.memory.seed-loaded.v1');
 
 /** A repeatable pseudo-random fingerprint, optionally nudged off an original. */
 function fingerprint(seed, length = 64) {
@@ -29,7 +33,7 @@ function nudge(vector, amount) {
   return out;
 }
 
-test.beforeEach(() => forgetAll());
+test.beforeEach(() => { forgetAll(); clearSeedFlag(); });
 
 test('a vector scaled to unit length has length 1', () => {
   const unit = toUnit(new Float32Array([3, 4]));
@@ -100,4 +104,77 @@ test('forgetting clears everything', () => {
   remember('toyota-corolla', fingerprint(2));
   forgetAll();
   assert.deepEqual(memoryStats(), { samples: 0, cars: 0 });
+});
+
+// --------------------------------------------------------- export / import
+
+test('exporting and importing round-trips what was learned', () => {
+  remember('toyota-corolla', fingerprint(1));
+  remember('honda-civic', fingerprint(2));
+  const dump = exportMemory();
+
+  forgetAll();
+  assert.equal(memoryStats().samples, 0);
+
+  const added = importMemory(dump);
+  assert.equal(added, 2);
+  assert.equal(memoryStats().samples, 2);
+  assert.ok(recall(fingerprint(1)));
+});
+
+test('importing adds to what is already learned rather than replacing it', () => {
+  remember('toyota-corolla', fingerprint(1));
+  remember('honda-civic', fingerprint(2));
+  const dump = exportMemory();
+  remember('ford-f150', fingerprint(3)); // learned locally after the export was taken
+
+  importMemory(dump); // re-importing the same export must not lose the local addition
+  assert.equal(memoryStats().samples, 5); // 3 local + 2 re-imported duplicates
+  assert.equal(memoryStats().cars, 3);
+});
+
+test('malformed entries in an imported file are skipped, not crashed on', () => {
+  const added = importMemory(JSON.stringify({
+    samples: [{ carId: 'toyota-corolla' }, null, { v: 'x' }, { carId: 'honda-civic', v: 'AAAA' }],
+  }));
+  assert.equal(added, 1, 'only the one entry with both a carId and a fingerprint counts');
+  assert.equal(memoryStats().samples, 1);
+});
+
+// ------------------------------------------------------------------ seed
+
+test('the seed loads once and marks itself so it never re-imports', async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    text: async () => JSON.stringify({ samples: [{ carId: 'toyota-corolla', v: 'AAAA' }] }),
+  });
+  const first = await loadSeedMemory();
+  assert.equal(first, 1);
+  assert.equal(memoryStats().samples, 1);
+
+  const second = await loadSeedMemory();
+  assert.equal(second, 0, 'a second load must not re-import the seed');
+  assert.equal(memoryStats().samples, 1);
+});
+
+test('a missing or unreachable seed file is not an error', async () => {
+  clearSeedFlag();
+  globalThis.fetch = async () => ({ ok: false });
+  assert.equal(await loadSeedMemory(), 0);
+
+  clearSeedFlag();
+  globalThis.fetch = async () => { throw new Error('offline'); };
+  assert.equal(await loadSeedMemory(), 0);
+});
+
+test('the seed never overwrites cars the player already caught themselves', async () => {
+  remember('honda-civic', fingerprint(9));
+  clearSeedFlag();
+  globalThis.fetch = async () => ({
+    ok: true,
+    text: async () => JSON.stringify({ samples: [{ carId: 'toyota-corolla', v: 'AAAA' }] }),
+  });
+  await loadSeedMemory();
+  assert.equal(memoryStats().samples, 2);
+  assert.equal(memoryStats().cars, 2);
 });
