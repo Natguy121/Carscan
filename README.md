@@ -18,6 +18,11 @@ G80 M3 are separate catches.
 ## How it plays
 
 1. **Take one photo.** Stand back, fit the whole car in frame, tap the shutter.
+   If any badges have been taught in the [Logo trainer](#logo-trainer), an
+   optional **"Scan the badge too"** button appears — a quick second, close-up
+   photo of just the badge, which is what actually lets a trained make be
+   recognised automatically. Skippable; typing the make you can see still
+   works without it.
 2. **Identify.** A small recognition model runs right there in your browser —
    no internet round trip — and guesses the car's body style (SUV, pickup,
    sedan…).
@@ -45,7 +50,11 @@ G80 M3 are separate catches.
    match is used the same way — the shortlist narrows to that make on its own,
    labelled "Trained badge match" so it's never a mystery why, with one tap on
    "Not that make" to undo it. It's still only ever a make, never the exact
-   car, so the final pick is always yours.
+   car, so the final pick is always yours. This needs the optional **"Scan the
+   badge too"** step below — a trained badge is a close-up of just the badge,
+   and matching that against the one whole-car photo the main flow already
+   takes essentially never works, badge visible in the shot or not. The
+   close-up gives it something to actually compare against.
 
    **Whatever you tap, it learns — and then it guesses.** Confirming a car
    files that photo's fingerprint under it, and the next time you scan
@@ -195,14 +204,19 @@ ever picks a make, never the exact car or an automatic catch. It only fires
 when a scan is both a strong match to one trained make *and* a clear
 stand-out over every other trained make — a narrow win over the runner-up is
 treated as no match at all, since that's not really reading a badge, just
-picking whichever trained make happens to be least dissimilar. Close-up badge
-photos are visually homogeneous (a shiny badge, blurred metal) and get
-compared against whatever a scan actually is, often a photo of the whole car
-rather than a badge, so this bar is deliberately much higher than the one
-whole-car memory uses on itself. That's a real limitation of doing this with
-a general-purpose model rather than one trained specifically to find logos in
-a wider scene — worth using since it's free when it works, but not a
-substitute for reading the badge yourself when it doesn't fire.
+picking whichever trained make happens to be least dissimilar.
+
+Getting there at all needs the **"Scan the badge too"** step on the identify
+screen (see [How it plays](#how-it-plays)) — a second, optional close-up
+photo, framed the way training photos are. Comparing that against the whole
+photo of the car instead, badge visible in the shot or not, essentially never
+works: close-up badge photos are visually homogeneous (a shiny badge,
+blurred metal) and simply don't resemble a photo of an entire car in the
+model's eyes, no matter how good the training. That's a real limitation of
+doing this with a general-purpose model rather than one trained specifically
+to find and crop logos out of a wider scene — worth using since it's free
+when it works, but not a substitute for reading the badge yourself when you'd
+rather skip the extra photo.
 
 ## Adding cars
 

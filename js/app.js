@@ -23,6 +23,14 @@ let lastResult = null;
 let selectedMake = null;   // the exact make, read off the badge by the player
 let makeQuery = '';        // what's typed in the badge box before a make is picked
 
+// An optional second, close-up photo of just the badge. A trained badge is a
+// close-up too, so matching it against the *whole-car* photo almost never
+// works — the two just don't look alike to the model, badge or no badge.
+// This gives the trained badge something it can actually be compared against.
+let badgeCapture = null;
+let badgeCamOn = false;
+let badgeCamResume = false; // whether the main scan camera was live before this overlay opened
+
 // --------------------------------------------------------------- logo trainer
 //
 // Teaching the app what a badge looks like, from close-up photos, gated by a
@@ -102,6 +110,18 @@ function renderScan() {
 
   $('#btn-identify').disabled = !shot;
 
+  // Only worth offering when something has actually been taught to match
+  // against — otherwise it's an extra step for a feature that can't fire.
+  const trainedBadges = shot && logoStats().samples > 0;
+  $('#badge-scan-row').hidden = !trainedBadges;
+  $('#badge-scan-row').innerHTML = !trainedBadges ? '' : badgeCapture
+    ? `<div class="badge-scan-added">
+         <img src="${esc(badgeCapture.thumb)}" alt="Close-up of the badge">
+         <span class="muted small">Badge photo added</span>
+         <button class="btn btn-ghost btn-small" data-badge-remove>Remove</button>
+       </div>`
+    : `<button class="link-btn" data-badge-scan>+ Scan the badge too (optional)</button>`;
+
   // The app only learns when you tell it what it is looking at, so say so up
   // front rather than leaving the confirm step feeling like a failure to guess.
   const { cars: learnedCars } = memoryStats();
@@ -145,10 +165,100 @@ function onCapture() {
 async function onFile(file) {
   try {
     capture = await captureFromFile(file);
+    badgeCapture = null;
     renderScan();
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+// --------------------------------------------------------- optional badge scan
+//
+// A trained badge is a close-up of just the badge, so matching it against the
+// one whole-car photo the main flow already takes almost never works — the
+// two just don't look alike to a model with no idea what "logo" means, badge
+// visible in frame or not. This is a second, optional photo framed the same
+// way the trainer asks for one, so a trained badge has something it can
+// actually be compared against.
+
+function badgeScanMarkup() {
+  if (badgeCamOn) {
+    return `
+      <button class="sheet-close" data-close aria-label="Close">✕</button>
+      <div class="verdict trainer">
+        <p class="verdict-kicker">Badge photo</p>
+        <h2>Fill the frame with just the badge</h2>
+        <div class="trainer-stage">
+          <video id="badge-cam" autoplay playsinline muted></video>
+        </div>
+        <button class="shutter" data-badge-shutter aria-label="Take the photo"><span></span></button>
+      </div>`;
+  }
+  return `
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div class="verdict trainer">
+      <p class="verdict-kicker">Badge photo</p>
+      <h2>Scan the badge too</h2>
+      <p class="muted">Optional. A close, well-lit photo of just the badge — the same framing the
+        Logo trainer asks for — is what actually lets a trained make be recognised automatically.</p>
+      <div class="trainer-choices">
+        <button class="btn btn-ghost" data-badge-start-cam>Take a photo</button>
+        <button class="btn btn-ghost" data-badge-upload>Upload a photo</button>
+      </div>
+    </div>`;
+}
+
+function openBadgeScan() {
+  badgeCamOn = false;
+  badgeCamResume = isRunning();
+  openOverlay('detail', badgeScanMarkup());
+}
+
+/** Release the camera hardware and, if the main scan view's own live feed was
+ * running before this overlay borrowed it, hand it back. */
+function stopBadgeCamera() {
+  const resume = badgeCamResume && badgeCamOn;
+  if (badgeCamOn) stopCamera();
+  badgeCamOn = false;
+  badgeCamResume = false;
+  if (resume) onStartCamera();
+}
+
+async function onBadgeStartCam() {
+  badgeCamOn = true;
+  openOverlay('detail', badgeScanMarkup());
+  try {
+    await startCamera($('#badge-cam'));
+  } catch (err) {
+    badgeCamOn = false;
+    toast(err instanceof CameraError ? err.message : 'Could not start the camera.', 'error');
+    openOverlay('detail', badgeScanMarkup());
+  }
+}
+
+function onBadgeShutter() {
+  let shot;
+  try {
+    shot = captureFrame($('#badge-cam'));
+  } catch (err) {
+    return toast(err.message, 'error');
+  }
+  badgeCapture = shot;
+  stopBadgeCamera();
+  closeOverlay('detail');
+  renderScan();
+}
+
+async function onBadgeFile(file) {
+  try {
+    badgeCapture = await captureFromFile(file);
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
+  stopBadgeCamera();
+  closeOverlay('detail');
+  renderScan();
 }
 
 // ------------------------------------------------------------ identification
@@ -185,10 +295,15 @@ async function onIdentify() {
 
   let predictions;
   let embedding = null;
+  let badgeEmbedding = null;
   try {
     const img = await loadImage(capture.preview);
     predictions = await classifyImage(img);
     embedding = await embedImage(img);
+    if (badgeCapture) {
+      const badgeImg = await loadImage(badgeCapture.preview);
+      badgeEmbedding = await embedImage(badgeImg);
+    }
   } catch (err) {
     openOverlay('result', `
       <button class="sheet-close" data-close aria-label="Close">✕</button>
@@ -204,10 +319,11 @@ async function onIdentify() {
   const character = inferCharacter(predictions);
   const learned = embedding ? recall(embedding) : null;
   // A bonus signal from the logo trainer, if anything has been taught. Trained
-  // photos are close-ups of just the badge, so this only really fires when a
-  // scan happens to land close to the same framing — worth checking since it's
-  // free, but it is not the app reading a logo out of an arbitrary photo.
-  const logoMatch = embedding ? recallLogo(embedding) : null;
+  // photos are close-ups of just the badge, so this needs the optional
+  // close-up badge photo to actually land close to that framing — matching it
+  // against the whole-car photo almost never works, badge visible or not.
+  const logoSource = badgeEmbedding || embedding;
+  const logoMatch = logoSource ? recallLogo(logoSource) : null;
   // A confident trained badge is used, not just offered — it narrows the
   // shortlist to that make automatically. It still only ever picks a make,
   // never the exact car, so the final tap to confirm is always yours; "Not
@@ -415,6 +531,7 @@ function logCar(carId) {
     </div>`);
 
   capture = null;
+  badgeCapture = null;
   renderScan();
 }
 
@@ -782,11 +899,15 @@ function wire() {
   $('#btn-start-cam').addEventListener('click', onStartCamera);
   $('#btn-capture').addEventListener('click', onCapture);
   $('#btn-identify').addEventListener('click', onIdentify);
-  $('#btn-retake').addEventListener('click', () => { capture = null; renderScan(); });
+  $('#btn-retake').addEventListener('click', () => { capture = null; badgeCapture = null; renderScan(); });
 
   $('#btn-upload-trigger').addEventListener('click', () => $('#file-input').click());
   $('#file-input').addEventListener('change', async (e) => {
     if (e.target.files[0]) await onFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#badge-file-input').addEventListener('change', async (e) => {
+    if (e.target.files[0]) await onBadgeFile(e.target.files[0]);
     e.target.value = '';
   });
 
@@ -835,10 +956,17 @@ function wire() {
 
     if (t.closest('[data-close]')) {
       stopTrainerCamera();
+      stopBadgeCamera();
       closeOverlay('result');
       closeOverlay('detail');
       return;
     }
+
+    if (t.closest('[data-badge-scan]')) return openBadgeScan();
+    if (t.closest('[data-badge-remove]')) { badgeCapture = null; return renderScan(); }
+    if (t.closest('[data-badge-start-cam]')) return onBadgeStartCam();
+    if (t.closest('[data-badge-shutter]')) return onBadgeShutter();
+    if (t.closest('[data-badge-upload]')) return $('#badge-file-input').click();
     if (t.closest('[data-goto]')) {
       closeOverlay('result');
       showView(t.closest('[data-goto]').dataset.goto);
@@ -923,11 +1051,11 @@ function wire() {
   // Click the backdrop or press Escape to dismiss.
   ['result', 'detail'].forEach((id) => {
     $(`#${id}-overlay`).addEventListener('click', (e) => {
-      if (e.target.id === `${id}-overlay`) { stopTrainerCamera(); closeOverlay(id); }
+      if (e.target.id === `${id}-overlay`) { stopTrainerCamera(); stopBadgeCamera(); closeOverlay(id); }
     });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { stopTrainerCamera(); closeOverlay('result'); closeOverlay('detail'); }
+    if (e.key === 'Escape') { stopTrainerCamera(); stopBadgeCamera(); closeOverlay('result'); closeOverlay('detail'); }
   });
 
   document.addEventListener('visibilitychange', () => {

@@ -269,6 +269,17 @@ main { flex: 1; padding: 1rem; }
 
 .scan-note { text-align: center; font-size: .76rem; color: var(--muted); margin-top: .6rem; }
 
+.badge-scan-row { text-align: center; margin: -.4rem 0 .7rem; }
+.badge-scan-row .link-btn { display: inline-block; margin: 0; }
+.badge-scan-added {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  font-size: .78rem;
+}
+.badge-scan-added img {
+  width: 32px; height: 32px; border-radius: 6px; object-fit: cover;
+  border: 1px solid var(--line);
+}
+
 /* ------------------------------------------------------------------- index */
 
 .index-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .9rem; }
