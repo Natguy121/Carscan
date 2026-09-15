@@ -596,6 +596,18 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .verdict .btn { margin-top: .7rem; }
 .warn-line { font-size: .76rem; color: var(--r-legendary); }
 
+/* Pinned to the top of the scrolling sheet: a shape-guess shortlist can be
+   wrong, and typing the make you can actually read is the one reliable fix,
+   so it has to stay reachable without scrolling back up past a long list. */
+.verdict-sticky {
+  position: sticky;
+  top: -.01px;
+  z-index: 1;
+  background: var(--panel);
+  margin: 0 -1.1rem;
+  padding: .5rem 1.1rem .7rem;
+}
+
 .evidence {
   display: flex; flex-wrap: wrap; gap: .35rem; justify-content: center;
   align-items: center; margin: .9rem 0 .3rem;

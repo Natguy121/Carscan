@@ -335,9 +335,11 @@ function renderVerdict(query = '') {
       <p class="verdict-kicker">${learnedCar ? 'Recognised from memory' : esc(label || 'Car detected')}</p>
       <h2>${learnedCar ? 'Is this it?' : 'Which one is it?'}</h2>
       <p class="muted">${intro}</p>
-      <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
-             value="${esc(query)}" autocomplete="off">
-      ${badgePicker(pool, logoMatch)}
+      <div class="verdict-sticky">
+        <input class="search" id="verdict-search" type="search" placeholder="Search all ${CARS.length} cars…"
+               value="${esc(query)}" autocomplete="off">
+        ${badgePicker(pool, logoMatch)}
+      </div>
       <div class="candidates">
         ${candidates.length
           ? candidates.map((car) => candidateRow({ car, guess: !searching && learnedCar?.id === car.id })).join('')
