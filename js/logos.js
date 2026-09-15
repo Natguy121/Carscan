@@ -14,7 +14,15 @@ import { toUnit, pack, unpack, similarity } from './memory.js';
 const KEY = 'carscan.logos.v1';
 const AUTH_KEY = 'carscan.logos.auth.v1';
 const MAX_SAMPLES = 300;
-const MATCH_THRESHOLD = 0.82;
+
+// Badge photos are close-ups of a small, visually similar object (a shiny
+// badge against blurred metal), and they get compared against whatever a
+// scan happens to be — often a photo of the whole car, not a badge at all.
+// That's a much weaker signal than memory.js's whole-car-to-whole-car match,
+// so a badge needs to be a clear stand-out, not just the nearest of a
+// mediocre bunch, before it's trusted enough to auto-narrow the shortlist.
+const MATCH_THRESHOLD = 0.93;
+const MIN_MARGIN = 0.03;
 
 async function sha256Hex(text) {
   const bytes = new TextEncoder().encode(text);
@@ -101,15 +109,22 @@ export function recallLogo(embedding, threshold = MATCH_THRESHOLD) {
     byMake.set(sample.make, scores);
   }
 
-  let best = null;
+  const ranked = [];
   for (const [make, scores] of byMake) {
     scores.sort((a, b) => b - a);
     const top = scores.slice(0, 2);
     const score = top.reduce((a, b) => a + b, 0) / top.length;
-    if (!best || score > best.score) best = { make, score };
+    ranked.push({ make, score });
   }
+  ranked.sort((a, b) => b.score - a.score);
 
-  return best && best.score >= threshold ? best : null;
+  const [best, runnerUp] = ranked;
+  if (!best || best.score < threshold) return null;
+  // A narrow win over the next-best make means it isn't really reading a
+  // badge, just picking whichever trained make happens to be least
+  // dissimilar — that's the "random" result, not a found logo.
+  if (runnerUp && best.score - runnerUp.score < MIN_MARGIN) return null;
+  return best;
 }
 
 export function logoStats() {

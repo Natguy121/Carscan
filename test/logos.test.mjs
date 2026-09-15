@@ -102,6 +102,14 @@ test('the closest of several taught badges wins', () => {
   assert.equal(recallLogo(nudge(honda, 0.01)).make, 'Honda');
 });
 
+test('a near-tie between two makes is not confident enough to call', () => {
+  const seen = fingerprint(7);
+  teachLogo('Ford', seen);
+  teachLogo('Honda', seen); // identical fingerprint under a different make: an exact tie
+  assert.equal(recallLogo(nudge(seen, 0.001)), null,
+    'whichever make happens to sort first is not a real match when another is equally close');
+});
+
 test('stats count samples and distinct makes separately', () => {
   teachLogo('Toyota', fingerprint(1));
   teachLogo('Toyota', fingerprint(2));

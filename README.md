@@ -191,14 +191,18 @@ photos — that file is what actually gets baked in.
 **How it's used.** A confident trained badge narrows the shortlist to that
 make automatically — labelled "Trained badge match: Toyota" next to the
 badge-typing box, with "Not that make" to undo it in one tap. It still only
-ever picks a make, never the exact car or an automatic catch. It also only
-fires when a scan happens to be framed similarly to the training photos, since
-the fingerprint is sensitive to what's actually in the picture: a close-up of
-a badge and a photo of a whole car rarely land close together even when it's
-the same make. That's a real limitation of doing this with a general-purpose
-model rather than one trained specifically to find logos in a wider scene —
-worth using since it's free when it works, but not a substitute for reading
-the badge yourself when it doesn't fire.
+ever picks a make, never the exact car or an automatic catch. It only fires
+when a scan is both a strong match to one trained make *and* a clear
+stand-out over every other trained make — a narrow win over the runner-up is
+treated as no match at all, since that's not really reading a badge, just
+picking whichever trained make happens to be least dissimilar. Close-up badge
+photos are visually homogeneous (a shiny badge, blurred metal) and get
+compared against whatever a scan actually is, often a photo of the whole car
+rather than a badge, so this bar is deliberately much higher than the one
+whole-car memory uses on itself. That's a real limitation of doing this with
+a general-purpose model rather than one trained specifically to find logos in
+a wider scene — worth using since it's free when it works, but not a
+substitute for reading the badge yourself when it doesn't fire.
 
 ## Adding cars
 
