@@ -174,7 +174,10 @@ never reuse a password you use anywhere else.
 
 **Training only affects this device — unless you ship it.** Like everything
 else here, trained badges live in local storage, not a shared database.
-*Export trained set* downloads them as JSON; *Import* merges a file back in.
+*Export trained set* tries to download the JSON, and also shows it as
+plain, selectable text with a *Copy* button — file downloads have turned out
+unreliable on some mobile browsers, silently producing an empty file, so the
+text box is the version to actually rely on. *Import* merges a file back in.
 That's how a trained set moves between devices, and it's also how the app can
 ship with badges already known: train some, export, and drop the file in as
 `data/logos.seed.json`. Every visitor's copy of the app fetches that file once

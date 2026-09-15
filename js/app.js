@@ -36,6 +36,7 @@ let trainerNote = '';
 let trainerError = '';
 let trainerCameraOn = false;
 let trainerFromCamera = false; // whether the pending capture came from the shutter, not upload
+let trainerExportText = null; // the exported JSON, shown for copy-paste — file downloads are flaky on some mobile browsers
 
 // ------------------------------------------------------------------ toasts
 
@@ -565,6 +566,18 @@ function trainerUnlockedMarkup() {
         Teach this logo
       </button>
 
+      ${trainerExportText ? `
+        <div class="trainer-export">
+          <p class="muted small">File downloads can be unreliable in some mobile browsers.
+            Copy this text instead and paste it wherever you need to hand it over.</p>
+          <textarea class="search trainer-export-text" id="trainer-export-text" readonly rows="5"
+                    onclick="this.select()">${esc(trainerExportText)}</textarea>
+          <div class="trainer-tools">
+            <button class="btn btn-ghost btn-small" data-trainer-copy-export>Copy</button>
+            <button class="btn btn-ghost btn-small" data-trainer-export-done>Done</button>
+          </div>
+        </div>` : ''}
+
       <div class="trainer-tools">
         <button class="btn btn-ghost btn-small" data-trainer-export>Export trained set</button>
         <button class="btn btn-ghost btn-small" data-trainer-import>Import</button>
@@ -698,11 +711,32 @@ function downloadJson(content, filename) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // Some mobile/WebView browsers hand the download off asynchronously; revoking
+  // immediately has been seen to race and produce an empty or truncated file.
+  // A short delay costs nothing on browsers where it already worked.
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function onTrainerExport() {
-  downloadJson(exportLogos(), 'carscan-logos.json');
+  const json = exportLogos();
+  downloadJson(json, 'carscan-logos.json');
+  // The download alone has proven unreliable on some phones — show the same
+  // content as copyable text so there's always a way to actually hand it over.
+  trainerExportText = json;
+  renderTrainer();
+}
+
+async function onTrainerCopyExport() {
+  const textarea = $('#trainer-export-text');
+  try {
+    await navigator.clipboard.writeText(trainerExportText || '');
+    toast('Copied.', 'success');
+  } catch {
+    // Clipboard API needs a secure context and permission; falling back to a
+    // manual select still gets the player to a copyable state.
+    textarea?.select();
+    toast('Select all and copy manually.', 'warn');
+  }
 }
 
 async function onTrainerImportFile(file) {
@@ -852,6 +886,8 @@ function wire() {
     }
     if (t.closest('[data-trainer-teach]')) return onTrainerTeach();
     if (t.closest('[data-trainer-export]')) return onTrainerExport();
+    if (t.closest('[data-trainer-copy-export]')) return onTrainerCopyExport();
+    if (t.closest('[data-trainer-export-done]')) { trainerExportText = null; return renderTrainer(); }
     if (t.closest('[data-trainer-import]')) return $('#logo-import-input').click();
     if (t.closest('[data-trainer-forget]')) {
       forgetLogos();
@@ -864,6 +900,7 @@ function wire() {
       trainerCapture = null;
       trainerNote = '';
       trainerError = '';
+      trainerExportText = null;
       return closeOverlay('detail');
     }
   });
