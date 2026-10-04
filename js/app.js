@@ -486,13 +486,58 @@ function startScan(mode) {
     ref: null,       // sensor mode: raw heading that maps to "first wall points right"
     turn: 90,        // manual mode: turn before the next wall, degrees (+ = right)
     error: '',
-    status: mode === 'scan' ? 'starting' : 'manual',
+    status: mode === 'scan' ? 'permission' : 'manual',
     statusMessage: '',
     squareUp: true,
   };
   showView('scan');
   renderScan();
-  if (mode === 'scan') startSensor();
+}
+
+// --- camera: a live view behind the drawing, so you see the room as it builds
+let camStream = null;
+let camWanted = true;
+
+async function startCamera() {
+  if (camStream || !camWanted || !navigator.mediaDevices?.getUserMedia) return;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  } catch {
+    camStream = null;
+    toast('Camera unavailable — showing the plan only.');
+    return;
+  }
+  if (!scan) { stopCamera(); return; }
+  const v = $('#scan-video');
+  v.srcObject = camStream;
+  v.hidden = false;
+  v.play?.().catch(() => {});
+  $('#scan-canvas').classList.add('has-camera');
+  updateCamToggle();
+  renderScanLive();
+}
+
+function stopCamera() {
+  camStream?.getTracks().forEach((t) => t.stop());
+  camStream = null;
+  const v = $('#scan-video');
+  if (v) { v.srcObject = null; v.hidden = true; }
+  $('#scan-canvas')?.classList.remove('has-camera');
+  updateCamToggle();
+}
+
+function updateCamToggle() {
+  const b = $('#cam-toggle');
+  if (!b) return;
+  b.hidden = !scan || scan.mode !== 'scan' || scan.status === 'permission';
+  b.textContent = camStream ? 'Camera off' : 'Camera on';
+}
+
+async function allowAccess() {
+  // Motion permission first: iOS only grants it directly inside the tap.
+  const sensorReady = startSensor();
+  startCamera();
+  await sensorReady;
 }
 
 async function startSensor() {
@@ -515,6 +560,7 @@ async function startSensor() {
 }
 
 function stopSensor() {
+  stopCamera();
   sensor?.stop();
   sensor = null;
   sensorState = null;
@@ -563,7 +609,7 @@ function previewWalls() {
 
 function renderScanLive() {
   if (!scan) return;
-  $('#scan-canvas').innerHTML = scanPreviewSvg(previewWalls(), liveHeading(), unit());
+  $('#scan-drawing').innerHTML = scanPreviewSvg(previewWalls(), liveHeading(), unit(), { overlay: !!camStream });
 
   const s = sensorState;
   const bubble = $('#level-bubble');
@@ -614,6 +660,16 @@ function renderScan() {
       ${n >= 2 && unknowns === 0 ? '<p class="muted small">Finishing adds the last wall back to the start for you.</p>' : ''}
       ${error}
       ${finish}`;
+  } else if (scan.status === 'permission') {
+    body = `
+      ${nameField}
+      <p class="step">PLANSCAN needs two things:</p>
+      <ul class="perm-list">
+        <li><strong>Motion &amp; orientation</strong> — to measure which way each wall runs.</li>
+        <li><strong>Camera</strong> — so you can see the room with the plan building on top of it. Optional.</li>
+      </ul>
+      <button class="btn btn-primary btn-wide" data-scan-allow>Allow motion &amp; camera</button>
+      <button class="btn btn-ghost btn-wide" data-scan-manual>Draw it by hand instead</button>`;
   } else if (scan.status === 'starting') {
     body = '<p class="step">Waiting for the motion sensors…</p>';
   } else if (scan.status === 'failed') {
@@ -648,6 +704,7 @@ function renderScan() {
       ${finish}`;
   }
   $('#scan-panel').innerHTML = body;
+  updateCamToggle();
   renderScanLive();
   $('#scan-length')?.focus();
 }
@@ -1004,6 +1061,17 @@ function wire() {
     if (on('[data-scan-undo]')) return onScanUndo();
     if (on('[data-scan-finish]')) return onScanFinish();
     if (on('[data-scan-cancel]')) return onScanCancel();
+    if (on('[data-scan-allow]')) {
+      readScanName();
+      const ready = allowAccess();
+      scan.status = 'starting';
+      renderScan();
+      return ready;
+    }
+    if (on('[data-cam-toggle]')) {
+      camWanted = !camStream;
+      return camStream ? stopCamera() || renderScanLive() : startCamera();
+    }
     if (on('[data-scan-retry]')) {
       scan.status = 'starting';
       renderScan();

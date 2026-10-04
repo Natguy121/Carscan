@@ -207,8 +207,8 @@ export function planSvg(plan, opts = {}) {
  * wall in whichever direction the phone points right now. A wall flagged
  * `worked` has a length the solver filled in, drawn dashed and marked ≈.
  */
-export function scanPreviewSvg(walls, liveHeading, unit = 'metric') {
-  const t = THEMES.screen;
+export function scanPreviewSvg(walls, liveHeading, unit = 'metric', { overlay = false } = {}) {
+  const t = overlay ? { ...THEMES.screen, bg: 'rgba(13,17,23,.35)', grid: 'rgba(255,255,255,.12)' } : THEMES.screen;
   const pts = openPath(walls);
   const end = pts[pts.length - 1];
   const ghostLen = 1;
@@ -247,5 +247,6 @@ export function scanPreviewSvg(walls, liveHeading, unit = 'metric') {
   }
   parts.push(`<circle cx="${pts[0].x}" cy="${pts[0].y}" r="${wallW * 1.3}" fill="${t.accent}"/>`);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${view.x} ${view.y} ${view.w} ${view.h}" class="plan-svg" font-family="system-ui, -apple-system, Segoe UI, sans-serif">${parts.join('')}</svg>`;
+  const shadow = overlay ? ' style="filter:drop-shadow(0 0 2px rgba(0,0,0,.9))"' : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${view.x} ${view.y} ${view.w} ${view.h}" class="plan-svg"${shadow} font-family="system-ui, -apple-system, Segoe UI, sans-serif">${parts.join('')}</svg>`;
 }

@@ -69,7 +69,11 @@
         <strong id="scan-title">New room</strong>
         <button class="btn btn-ghost btn-small" data-scan-undo>Undo</button>
       </div>
-      <div class="canvas scan-canvas" id="scan-canvas"></div>
+      <div class="canvas scan-canvas" id="scan-canvas">
+        <video id="scan-video" class="scan-video" playsinline muted autoplay hidden></video>
+        <div class="scan-drawing" id="scan-drawing"></div>
+        <button class="btn btn-ghost btn-small cam-toggle" id="cam-toggle" data-cam-toggle hidden>Camera off</button>
+      </div>
       <div class="scan-panel" id="scan-panel"></div>
     </section>
   </main>

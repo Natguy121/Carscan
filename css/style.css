@@ -147,7 +147,12 @@ main { max-width: 720px; margin: 0 auto; padding: 1rem; }
 /* --------------------------------------------------------------------- scan */
 
 .scan-head strong { font-size: 1rem; }
-.scan-canvas { height: min(42vh, 380px); }
+.scan-canvas { height: min(48vh, 440px); }
+.scan-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan-drawing { position: absolute; inset: 0; }
+.scan-drawing svg { width: 100%; height: 100%; display: block; }
+.cam-toggle { position: absolute; top: .5rem; right: .5rem; z-index: 2; background: rgba(13,17,23,.7); }
+.perm-list { margin: 0 0 .9rem 1.1rem; padding: 0; line-height: 1.5; }
 .scan-panel { padding: .9rem 0; }
 .step { font-size: 1rem; margin-bottom: .7rem; }
 .turn-row .btn { flex: 1 1 40%; }
