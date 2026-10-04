@@ -1,131 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#07090d">
-<title>CARSCAN — scan cars, build the index</title>
-<link rel="stylesheet" href="css/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <title>PLANSCAN — floor plans from your phone</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M7 7h18v11h-8v7H7z' fill='none' stroke='%2338bdf8' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
-<div class="app">
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">CAR<span>SCAN</span></span>
-    </div>
-    <div class="level-block">
-      <div class="level-line">
-        <span class="level-badge" id="level-badge">LV 1</span>
-        <span class="xp-text" id="xp-text">0 / 70 XP</span>
-      </div>
-      <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+    <button class="brand" id="btn-home" aria-label="All plans">PLAN<span>SCAN</span></button>
+    <div class="unit-toggle" role="group" aria-label="Units">
+      <button data-unit="metric">m</button>
+      <button data-unit="imperial">ft</button>
     </div>
   </header>
 
   <main>
-    <!-- ------------------------------------------------------------ SCAN -->
-    <section class="view" id="view-scan">
-      <div class="stage">
-        <video id="cam" playsinline muted autoplay></video>
-        <div class="stage-empty" id="stage-empty">
-          <div class="stage-empty-inner">
-            <p class="stage-empty-title">Camera off</p>
-            <p class="stage-empty-sub" id="stage-empty-sub">Start the camera to scan a car, or upload a photo. Recognition runs on this device — no account needed.</p>
-            <button class="btn btn-primary" id="btn-start-cam">Start camera</button>
-          </div>
-        </div>
-        <div class="reticle" aria-hidden="true">
-          <span class="corner tl"></span><span class="corner tr"></span>
-          <span class="corner bl"></span><span class="corner br"></span>
-          <span class="scanline"></span>
-        </div>
-        <div class="stage-hint" id="stage-hint">Fit the whole car in frame</div>
-        <div class="shot-preview" id="shot-preview" hidden></div>
-      </div>
-
-      <div class="scan-controls">
-        <button class="btn btn-ghost" id="btn-upload-trigger" title="Use a photo from your device">Upload</button>
-        <button class="shutter" id="btn-capture" aria-label="Take the photo"><span></span></button>
-        <button class="btn btn-ghost" id="btn-retake" hidden>Retake</button>
-      </div>
-      <input type="file" id="file-input" accept="image/*" hidden>
-      <input type="file" id="badge-file-input" accept="image/*" hidden>
-      <input type="file" id="logo-file-input" accept="image/*" multiple hidden>
-      <input type="file" id="logo-import-input" accept="application/json" hidden>
-      <input type="file" id="memory-import-input" accept="application/json" hidden>
-
-      <div class="badge-scan-row" id="badge-scan-row" hidden></div>
-
-      <button class="btn btn-primary btn-identify" id="btn-identify" disabled>
-        Identify car
-      </button>
-      <p class="scan-note" id="scan-note">Stand back and fit the whole car in frame.</p>
-    </section>
-
-    <!-- ----------------------------------------------------------- INDEX -->
-    <section class="view" id="view-index" hidden>
-      <div class="index-head">
+    <!-- ------------------------------------------------------------- HOME -->
+    <section class="view" id="view-home">
+      <div class="home-head">
         <div>
-          <h2>The Cardex</h2>
-          <p class="muted" id="index-progress">0 of 0 discovered</p>
+          <h1>Your floor plans</h1>
+          <p class="muted">Walk around a room, touch your phone to each wall, and get a measured plan.</p>
         </div>
-        <div class="ring" id="completion-ring"></div>
+        <button class="btn btn-primary" id="btn-new-plan">New plan</button>
       </div>
-      <div class="filters" id="filters"></div>
-      <div class="grid" id="grid"></div>
+      <div class="plan-list" id="plan-list"></div>
+
+      <details class="howto">
+        <summary>How scanning works</summary>
+        <ol>
+          <li>Stand at any wall. Hold your phone flat, screen up, and press its long edge against the wall
+            with the top pointing the way you're about to walk.</li>
+          <li>Hold still for a moment and tap <strong>Capture wall</strong>. Type its length if you measured it.</li>
+          <li>Walk to the next wall the same way round and repeat until you're back where you started.</li>
+          <li>Tap <strong>Finish room</strong>. Corners are squared up and the plan closes itself. Two walls
+            can be left unmeasured — they're worked out from the rest.</li>
+        </ol>
+        <p class="muted small">Your phone's motion sensors measure the angle of every wall. They can't measure
+          distance, so wall lengths come from a tape measure, a laser measure, or pacing it out. Nothing is
+          uploaded — plans are saved in this browser.</p>
+      </details>
     </section>
 
-    <!-- ---------------------------------------------------------- GARAGE -->
-    <section class="view" id="view-garage" hidden>
-      <h2>Garage</h2>
-      <div class="stats" id="stats"></div>
-
-      <h3 class="section-title">Achievements</h3>
-      <div class="achievements" id="achievements"></div>
-
-      <h3 class="section-title">Rarity breakdown</h3>
-      <div class="rarity-bars" id="rarity-bars"></div>
-
-      <h3 class="section-title">How it works</h3>
-      <div class="settings">
-        <p class="muted small">
-          Recognition runs right in this browser using a small on-device model — no account, no
-          API key, and no data ever leaves your device. It can spot a car's <strong>body style</strong>
-          (SUV, sedan, pickup…), but not an exact make and model, so you confirm the exact car from
-          a shortlist after every scan. Whatever you confirm, it remembers, so it recognises that
-          exact car itself next time.
-        </p>
-        <div class="settings-actions">
-          <button class="btn btn-ghost" id="btn-memory-export">Export learned cars</button>
-          <button class="btn btn-ghost" id="btn-memory-import">Import learned cars</button>
-          <button class="btn btn-danger" id="btn-reset">Reset all progress</button>
-        </div>
-        <button class="link-btn" id="btn-logo-trainer">Logo trainer</button>
+    <!-- ------------------------------------------------------------- PLAN -->
+    <section class="view" id="view-plan" hidden>
+      <div class="plan-head">
+        <button class="btn btn-ghost btn-small" data-go-home>← Plans</button>
+        <button class="plan-title" id="plan-title" data-rename-plan></button>
+        <button class="btn btn-ghost btn-small" data-export>Export</button>
       </div>
+      <div class="canvas" id="plan-canvas"></div>
+      <p class="hint muted small" id="plan-hint"></p>
+      <div class="add-room">
+        <button class="btn btn-primary" data-add-room="scan">Scan a room</button>
+        <button class="btn btn-ghost" data-add-room="manual">Draw by hand</button>
+        <button class="btn btn-ghost" data-add-room="rect">Rectangle</button>
+      </div>
+      <div class="summary" id="plan-summary"></div>
+    </section>
+
+    <!-- ------------------------------------------------------------- SCAN -->
+    <section class="view" id="view-scan" hidden>
+      <div class="scan-head">
+        <button class="btn btn-ghost btn-small" data-scan-cancel>Cancel</button>
+        <strong id="scan-title">New room</strong>
+        <button class="btn btn-ghost btn-small" data-scan-undo>Undo</button>
+      </div>
+      <div class="canvas scan-canvas" id="scan-canvas"></div>
+      <div class="scan-panel" id="scan-panel"></div>
     </section>
   </main>
 
-  <nav class="tabbar">
-    <button class="tab is-active" data-view="scan"><span class="tab-ico">◎</span>Scan</button>
-    <button class="tab" data-view="index"><span class="tab-ico">▦</span>Cardex</button>
-    <button class="tab" data-view="garage"><span class="tab-ico">★</span>Garage</button>
-  </nav>
-</div>
+  <div class="overlay" id="sheet-overlay" hidden>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<!-- Result of a scan: analysis, then the verdict -->
-<div class="overlay" id="result-overlay" hidden>
-  <div class="overlay-sheet" id="result-sheet" role="dialog" aria-modal="true" aria-label="Scan result"></div>
-</div>
-
-<!-- A car's full spec sheet -->
-<div class="overlay" id="detail-overlay" hidden>
-  <div class="overlay-sheet" id="detail-sheet" role="dialog" aria-modal="true" aria-label="Car details"></div>
-</div>
-
-<div class="toasts" id="toasts" aria-live="polite"></div>
-
-<script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

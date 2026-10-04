@@ -1,7 +1,7 @@
 {
-  "name": "carscan",
-  "version": "1.0.0",
-  "description": "Scan a car with your camera, identify it, and collect it in an index of specs.",
+  "name": "planscan",
+  "version": "2.0.0",
+  "description": "Floor plans from your phone: touch each wall, type its length, get a measured plan.",
   "type": "module",
   "private": true,
   "scripts": {
